@@ -1,0 +1,6 @@
+# Build and test output.
+/*.test
+/coverage.out
+
+# Playwright's scratch, from looking at the page.
+.playwright-mcp/

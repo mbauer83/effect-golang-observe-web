@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>effect-golang inspector</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #fbfbfa;
+    --panel: #ffffff;
+    --edge: #e3e2df;
+    --ink: #1a1a18;
+    --quiet: #6b6a66;
+    --accent: #2f5d50;
+    --bad: #9b2c2c;
+    --warn: #8a5a00;
+    --open: #2b4c7e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #16181a;
+      --panel: #1d2022;
+      --edge: #2f3336;
+      --ink: #e6e6e3;
+      --quiet: #9a9a95;
+      --accent: #7fbfa9;
+      --bad: #e08a8a;
+      --warn: #d8b166;
+      --open: #8fb3e0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline;
+    padding: 0.9rem 1.2rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--edge);
+  }
+  h1 { margin: 0; font-size: 1rem; font-weight: 650; letter-spacing: 0.01em; }
+  .meta { color: var(--quiet); font-size: 0.82rem; }
+  .controls { margin-left: auto; display: flex; gap: 0.6rem; align-items: center; }
+  button, select {
+    font: inherit; font-size: 0.82rem;
+    color: var(--ink); background: var(--ground);
+    border: 1px solid var(--edge); border-radius: 6px;
+    padding: 0.25rem 0.6rem; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--accent); }
+  main {
+    display: grid; gap: 1rem; padding: 1.2rem;
+    grid-template-columns: repeat(auto-fit, minmax(28rem, 1fr));
+    align-items: start;
+  }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--edge); border-radius: 8px;
+    padding: 0.9rem 1rem 1rem;
+    min-width: 0;
+  }
+  h2 {
+    margin: 0 0 0.7rem; font-size: 0.78rem; font-weight: 650;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--quiet);
+  }
+  .empty { color: var(--quiet); font-style: italic; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 0.28rem 0.5rem 0.28rem 0; white-space: nowrap; }
+  th { color: var(--quiet); font-weight: 550; border-bottom: 1px solid var(--edge); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .tree { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
+  .span { padding: 0.1rem 0; }
+  .name { font-weight: 600; }
+  .took { color: var(--quiet); }
+  .status-success { color: var(--accent); }
+  .status-typed_failure, .status-defect { color: var(--bad); }
+  .status-interrupted { color: var(--warn); }
+  .status-open { color: var(--open); font-weight: 600; }
+  .event { color: var(--quiet); }
+  .pill {
+    display: inline-block; border: 1px solid var(--edge); border-radius: 999px;
+    padding: 0 0.45rem; font-size: 0.72rem; color: var(--quiet);
+  }
+  .fault { color: var(--bad); }
+
+  /* The waterfall. A bar's offset and width are the span's start and
+     duration, which is the visualization every tracing tool converges on:
+     nesting says what contained what, and only a timeline says what waited. */
+  .waterfall { display: grid; grid-template-columns: minmax(9rem, auto) 1fr; gap: 0 0.7rem; align-items: center; }
+  .waterfall .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track { position: relative; height: 1.05rem; background: color-mix(in srgb, var(--edge) 40%, transparent); border-radius: 3px; }
+  .bar { position: absolute; top: 0; bottom: 0; min-width: 2px; border-radius: 3px; background: var(--accent); opacity: 0.85; }
+  .bar.status-typed_failure, .bar.status-defect { background: var(--bad); }
+  .bar.status-interrupted { background: var(--warn); }
+  .bar.status-open { background: repeating-linear-gradient(90deg, var(--open) 0 6px, transparent 6px 10px); }
+  .attrs { color: var(--quiet); font-size: 0.76rem; }
+  .attrs .pill { margin-right: 0.3rem; }
+  .age { font-variant-numeric: tabular-nums; }
+
+  /* Gauges and charts. Inline SVG and CSS, because the page carries no
+     library: a chart drawn by a framework fetched from a CDN is a chart that
+     does not appear on the machine you most need it on. */
+  .gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.8rem; }
+  .gauge .name { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--quiet); font-weight: 550; }
+  .gauge .value { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+  .gauge .of { color: var(--quiet); font-size: 0.78rem; }
+  .meter { height: 0.4rem; border-radius: 999px; background: color-mix(in srgb, var(--edge) 55%, transparent); overflow: hidden; margin-top: 0.3rem; display: flex; }
+  .meter span { display: block; height: 100%; }
+  .meter .used { background: var(--accent); }
+  .meter .runnable { background: var(--warn); }
+  .meter .waiting { background: color-mix(in srgb, var(--open) 55%, transparent); }
+  .meter .gc { background: var(--bad); }
+  .legend { color: var(--quiet); font-size: 0.72rem; margin-top: 0.2rem; }
+  .charts { display: grid; gap: 0.9rem; }
+  .chart .name { display: flex; justify-content: space-between; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--quiet); font-weight: 550; }
+  .chart svg { display: block; width: 100%; height: 3.4rem; overflow: visible; }
+  .chart .area { fill: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .chart .line { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .chart.warm .area { fill: color-mix(in srgb, var(--warn) 22%, transparent); }
+  .chart.warm .line { stroke: var(--warn); }
+  .chart.cool .area { fill: color-mix(in srgb, var(--open) 22%, transparent); }
+  .chart.cool .line { stroke: var(--open); }
+  /* uPlot draws the time series: axes, a cursor that reads values off the
+     series under the pointer, and a legend. Themed to the page rather than
+     restyled, so a dark viewer gets a dark chart. */
+  .uplot { width: 100%; }
+  .u-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--quiet); font-weight: 550; }
+  .u-legend { font-size: 0.76rem; color: var(--quiet); }
+  .u-legend .u-marker { border-radius: 2px; }
+  .u-inline .u-series > * { padding: 0 0.3rem; }
+  .u-over, .u-axis { color: var(--quiet); }
+
+  /* The waterfall. No chart library draws a span waterfall -- rows of nested
+     bars on a shared axis, with events marked on them -- so this is drawn
+     here, with the axis and the details a chart library would have given. */
+  /* Bounded, because a busy program produces more traces than a panel can
+     show and the newest are the ones being looked for. */
+  .traces { display: grid; gap: 0.15rem; margin-bottom: 0.4rem; max-height: 22rem; overflow-y: auto; }
+  .trace {
+    display: grid; grid-template-columns: minmax(10rem, auto) 1fr auto;
+    gap: 0.6rem; align-items: center;
+    padding: 0.15rem 0.35rem; border-radius: 5px; cursor: pointer;
+    border: 1px solid transparent; text-align: left; background: none;
+    color: inherit; font: inherit;
+  }
+  .trace:hover { border-color: var(--edge); }
+  .trace[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+/* The axis shares the rows' grid, so a tick sits above the position it
+     labels. Full width, it labelled the panel and not the bars. */
+  .axis { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: 0.6rem; margin-bottom: 0.15rem; }
+  .axis .scale { position: relative; height: 1.15rem; border-bottom: 1px solid var(--edge); }
+  .axis .tick { position: absolute; bottom: 0; font-size: 0.68rem; color: var(--quiet); white-space: nowrap; }
+  .axis .tick::after { content: ""; position: absolute; left: 0; bottom: -0.3rem; height: 0.3rem; border-left: 1px solid var(--edge); }
+  /* The ends are pulled inside, so neither label is clipped by the panel. */
+  .axis .tick.first { transform: none; }
+  .axis .tick.last { transform: translateX(-100%); }
+  .axis .tick.last::after { left: 100%; }
+  .axis .tick.middle { transform: translateX(-50%); }
+  .axis .tick.middle::after { left: 50%; }
+  .row { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: 0.6rem; align-items: center; }
+  .row.chosen .track { outline: 1px solid var(--accent); outline-offset: 1px; }
+  .row .track { cursor: pointer; }
+  .mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: 0.55; }
+  .mark.status-typed_failure, .mark.status-defect { background: var(--bad); opacity: 0.9; }
+  .details { border-top: 1px dashed var(--edge); margin-top: 0.5rem; padding-top: 0.5rem; font-size: 0.8rem; }
+  .details dl { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.7rem; margin: 0.3rem 0 0; }
+  .details dt { color: var(--quiet); }
+  .details dd { margin: 0; }
+  .details .events { margin: 0.4rem 0 0; padding: 0; list-style: none; color: var(--quiet); }
+
+  /* Hot paths: the same arithmetic a flame graph does -- a span's duration
+     less its children's -- ranked, because a ranked list reads in a panel
+     and a flame graph needs a page. */
+  .hot { display: grid; gap: 0.25rem; }
+  .hot .row { grid-template-columns: minmax(12rem, 22rem) 1fr auto; }
+  .hot .path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hot .path .leaf { font-weight: 650; }
+  .hot .share { font-size: 0.78rem; color: var(--quiet); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hot .bar { position: relative; }
+  .caveat { color: var(--quiet); font-size: 0.76rem; margin: 0.2rem 0 0.6rem; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<header>
+  <h1>effect-golang inspector</h1>
+  <a class="meta" id="app" href="/">the app &rarr;</a>
+  <span class="meta" id="taken">reading…</span>
+  <span class="meta" id="dropped"></span>
+  <span class="meta fault" id="fault"></span>
+  <div class="controls">
+    <select id="every" aria-label="Refresh interval">
+      <option value="1000">every 1s</option>
+      <option value="2000" selected>every 2s</option>
+      <option value="5000">every 5s</option>
+      <option value="0">paused</option>
+    </select>
+    <button id="now" type="button">Read now</button>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>Process</h2>
+    <div class="gauges" id="gauges"></div>
+    <div class="charts" id="charts"></div>
+  </section>
+  <section>
+    <h2>Cost by route</h2>
+    <p class="caveat" id="costcaveat"></p>
+    <div class="scroll"><table id="costs"></table></div>
+  </section>
+  <section>
+    <h2>Fibers</h2>
+    <div id="fibers" class="tree"></div>
+    <p class="meta" id="owned"></p>
+  </section>
+  <section>
+    <h2>Open spans</h2>
+    <div id="open" class="tree"></div>
+  </section>
+  <section>
+    <h2>Traces</h2>
+    <div class="traces" id="traces"></div>
+    <p class="meta" id="loose"></p>
+  </section>
+  <section>
+    <h2>Hot paths</h2>
+    <p class="caveat">self time, all traces in the window</p>
+    <div class="hot" id="hot"></div>
+  </section>
+  <section>
+    <h2>Timeline</h2>
+    <div class="axis" id="axis"></div>
+    <div id="waterfall"></div>
+    <div class="details" id="details"></div>
+  </section>
+  <section>
+    <h2>Measurements</h2>
+    <div class="scroll"><table id="measurements"></table></div>
+  </section>
+  <section>
+    <h2>Surface</h2>
+    <div class="scroll"><table id="routes"></table></div>
+  </section>
+</main>
+
+<script>
+// The snapshot lives beside this page, whatever the inspector was mounted
+// under: the page is served at <at> and the reading at <at>/snapshot, so the
+// mount point never has to be baked in.
+const mounted = location.pathname.replace(/\/$/, "");
+const source = mounted + "/snapshot";
+
+const el = (id) => document.getElementById(id);
+const text = (value) => document.createTextNode(String(value));
+
+function tagged(tag, className, content) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (content !== undefined) node.appendChild(text(content));
+  return node;
+}
+
+// at renders a position on a timeline, where zero is the start: "-" or an
+// empty string there says the first span had no beginning.
+function at(value) {
+  return value ? micros(value) : "0";
+}
+
+function micros(value) {
+  if (!value) return "";
+  if (value < 1000) return value + "µs";
+  if (value < 1000000) return (value / 1000).toFixed(value < 10000 ? 2 : 1) + "ms";
+  return (value / 1000000).toFixed(2) + "s";
+}
+
+function statusClass(span) {
+  return span.open ? "status-open" : "status-" + (span.status || "unclassified");
+}
+
+// Hot paths: every span in the window aggregated by the chain of names that
+// reaches it, ranked by the time its own body took.
+//
+// Self time and not total, which is the whole point: a route that spends all
+// of itself inside one stage is not hot, the stage is. Summed across traces,
+// so a stage that is fast once and runs two hundred times ranks above one
+// that is slow once -- which is the question "where does the time go" actually
+// asking.
+function hotPaths(traces) {
+  const held = new Map();
+  for (const trace of traces) {
+    const chain = [];
+    for (const span of trace.spans) {
+      chain.length = span.depth;
+      chain[span.depth] = span.name || "(unnamed)";
+      const path = chain.slice(0, span.depth + 1).join(" \u203a ");
+      const found = held.get(path) || { path: path, runs: 0, self: 0, total: 0 };
+      found.runs += 1;
+      found.self += span.selfMicros;
+      found.total += span.open ? span.ageMicros : span.micros;
+      held.set(path, found);
+    }
+  }
+  const ranked = [...held.values()];
+  ranked.sort((first, second) => second.self - first.self);
+  return ranked;
+}
+
+function renderHot(into, traces) {
+  into.replaceChildren();
+  const ranked = hotPaths(traces);
+  if (ranked.length === 0) {
+    into.appendChild(tagged("p", "empty", "nothing in the window"));
+    return;
+  }
+  const hottest = ranked[0].self || 1;
+  const everything = ranked.reduce((sum, one) => sum + one.self, 0) || 1;
+
+  for (const one of ranked.slice(0, 12)) {
+    const row = tagged("div", "row");
+    const path = tagged("div", "path");
+    const parts = one.path.split(" \u203a ");
+    const leaf = parts.pop();
+    if (parts.length) path.appendChild(tagged("span", null, parts.join(" \u203a ") + " \u203a "));
+    path.appendChild(tagged("span", "leaf", leaf));
+    path.title = one.path;
+    row.appendChild(path);
+
+    const track = tagged("div", "track");
+    const bar = tagged("div", "bar status-success");
+    bar.style.left = "0";
+    bar.style.width = Math.max(0.8, 100 * one.self / hottest) + "%";
+    bar.title = micros(one.self) + " of its own over " + one.runs + " run(s)";
+    track.appendChild(bar);
+    row.appendChild(track);
+
+    row.appendChild(tagged("div", "share",
+      micros(one.self) + "  " + percent(one.self / everything) +
+      "  \u00d7" + one.runs));
+    into.appendChild(row);
+  }
+}
+
+// The traces, and one of them on a timeline.
+//
+// A reading's spans arrive flat, in reading order, with a depth: a depth of
+// zero starts a trace and everything deeper belongs to it. Grouping them here
+// rather than on the wire keeps the description free of a recursive shape.
+function tracesOf(spans) {
+  const traces = [];
+  for (const span of spans || []) {
+    if (span.depth === 0 || traces.length === 0) {
+      traces.push({ root: span, spans: [span] });
+      continue;
+    }
+    traces[traces.length - 1].spans.push(span);
+  }
+  return traces;
+}
+
+// A trace's own window: from its first span to the end of its last, so the
+// bars are scaled to the trace and not to the whole reading. Scaling to the
+// reading is what made every bar a hairline -- a reading spans the minutes
+// between requests and a request spans microseconds.
+function windowOf(trace) {
+  let from = Infinity;
+  let to = 0;
+  for (const span of trace.spans) {
+    from = Math.min(from, span.startMicros);
+    to = Math.max(to, span.startMicros + (span.open ? span.ageMicros : span.micros));
+  }
+  if (!isFinite(from)) return { from: 0, to: 1 };
+  // A trace of one instantaneous span still needs a width to draw in.
+  return { from: from, to: Math.max(to, from + 1) };
+}
+
+let chosen = { trace: null, span: null };
+
+// A trace worth arriving on: the newest one that has something to decompose,
+// or the newest at all. Defaulting to the first trace showed a timeline of one
+// bar, which is the panel's least useful state.
+function defaultTrace(traces) {
+  const decomposable = traces.findIndex((trace) => trace.spans.length > 1);
+  return decomposable >= 0 ? decomposable : 0;
+}
+
+// chosenIn is the trace the panels are showing: the caller's choice while it
+// still exists, and the default until they make one.
+function chosenIn(traces) {
+  if (chosen.trace === null || chosen.trace >= traces.length) {
+    return defaultTrace(traces);
+  }
+  return chosen.trace;
+}
+
+function renderTraces(into, traces) {
+  into.replaceChildren();
+  if (traces.length === 0) {
+    into.appendChild(tagged("p", "empty", "none in the window"));
+    return;
+  }
+  // Newest first: the trace worth looking at is usually the last thing that
+  // happened.
+  traces.forEach((trace, index) => {
+    const held = windowOf(trace);
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "trace";
+    row.setAttribute("aria-current", String(index === chosenIn(traces)));
+    row.appendChild(tagged("span", "name", trace.root.name || "(unnamed)"));
+    const took = trace.root.open
+      ? tagged("span", statusClass(trace.root), "open " + micros(trace.root.ageMicros))
+      : tagged("span", statusClass(trace.root),
+          micros(held.to - held.from) + " " + (trace.root.status || "unclassified"));
+    row.appendChild(took);
+    row.appendChild(tagged("span", "took",
+      trace.spans.length + " span" + (trace.spans.length === 1 ? "" : "s")));
+    row.addEventListener("click", () => {
+      chosen = { trace: index, span: null };
+      redraw();
+    });
+    into.appendChild(row);
+  });
+}
+
+// The axis: four ticks across the chosen trace's window, so a bar's position
+// means something. Rounded to a readable step rather than to quarters of an
+// arbitrary number.
+function renderAxis(into, held) {
+  into.replaceChildren();
+  into.appendChild(tagged("div", "label"));
+  const scale = tagged("div", "scale");
+  const width = held.to - held.from;
+  for (let index = 0; index <= 4; index++) {
+    const where = index === 0 ? "first" : (index === 4 ? "last" : "middle");
+    const tick = tagged("div", "tick " + where, at(Math.round((index / 4) * width)));
+    tick.style.left = (100 * index / 4) + "%";
+    scale.appendChild(tick);
+  }
+  into.appendChild(scale);
+}
+
+function renderWaterfall(into, details, traces) {
+  el("axis").replaceChildren();
+  into.replaceChildren();
+  details.replaceChildren();
+  if (traces.length === 0) {
+    into.appendChild(tagged("p", "empty", "nothing to draw"));
+    return;
+  }
+  const trace = traces[chosenIn(traces)];
+  const held = windowOf(trace);
+  const width = held.to - held.from;
+  renderAxis(el("axis"), held);
+
+  trace.spans.forEach((span, index) => {
+    const row = tagged("div", "row" + (chosen.span === index ? " chosen" : ""));
+    const label = tagged("div", "label");
+    label.style.paddingLeft = (span.depth * 0.8) + "rem";
+    label.appendChild(tagged("span", "name", span.name || "(unnamed)"));
+    row.appendChild(label);
+
+    const track = tagged("div", "track");
+    const took = span.open ? span.ageMicros : span.micros;
+    const bar = tagged("div", "bar " + statusClass(span));
+    bar.style.left = (100 * (span.startMicros - held.from) / width) + "%";
+    bar.style.width = Math.max(0.8, 100 * took / width) + "%";
+    track.appendChild(bar);
+
+    // Events as marks on the bar's own timeline, which is what an event's
+    // offset is for: a list says what happened and a mark says when.
+    for (const event of span.events || []) {
+      const mark = tagged("div", "mark " + ("status-" + (event.status || "none")));
+      mark.style.left = (100 * (event.atMicros - held.from) / width) + "%";
+      mark.title = event.kind + (event.operation ? " " + event.operation : "");
+      track.appendChild(mark);
+    }
+
+    // Hover reads it, click keeps it: a details panel that vanished when the
+    // pointer left would be one nobody could read the bottom of.
+    const show = () => showDetails(details, span, held);
+    row.addEventListener("mouseenter", show);
+    row.addEventListener("click", () => {
+      chosen = { trace: chosenIn(traces), span: index };
+      redraw();
+    });
+    row.appendChild(track);
+    into.appendChild(row);
+  });
+
+  const kept = trace.spans[chosen.span] || trace.spans[0];
+  showDetails(details, kept, held);
+}
+
+// showDetails is what a chart library's tooltip would have been, except that
+// it holds still: name, where it was described, when it ran within the trace,
+// what it ended as, what it was annotated with, and what happened inside it.
+function showDetails(into, span, held) {
+  into.replaceChildren();
+  into.appendChild(tagged("div", "name", span.name || "(unnamed)"));
+  const list = document.createElement("dl");
+  const say = (term, value) => {
+    list.appendChild(tagged("dt", null, term));
+    list.appendChild(tagged("dd", null, value));
+  };
+  say("status", span.open ? "open" : (span.status || "unclassified"));
+  say(span.open ? "open for" : "took",
+    micros(span.open ? span.ageMicros : span.micros));
+  if (!span.open && span.selfMicros !== span.micros) {
+    say("of its own", micros(span.selfMicros));
+  }
+  say("began", "+" + at(span.startMicros - held.from));
+  say("span", "#" + span.id + (span.parentId ? " under #" + span.parentId : " (root)"));
+  if (span.source) say("described", span.source);
+  for (const attribute of span.attributes || []) {
+    say(attribute.key, attribute.value);
+  }
+  into.appendChild(list);
+
+  const events = span.events || [];
+  if (events.length === 0) return;
+  const inside = tagged("ul", "events");
+  for (const event of events) {
+    let said = "+" + at(event.atMicros - held.from) + "  " + event.kind;
+    if (event.operation) said += " " + event.operation;
+    if (event.status) said += " " + event.status;
+    if (event.attempt) said += " attempt " + event.attempt;
+    inside.appendChild(tagged("li", null, said));
+  }
+  into.appendChild(inside);
+}
+
+function renderFibers(into, fibers) {
+  into.replaceChildren();
+  if (!fibers || fibers.length === 0) {
+    into.appendChild(tagged("p", "empty", "none running"));
+    return;
+  }
+  for (const fiber of fibers) {
+    const line = tagged("div", "span");
+    line.style.paddingLeft = (fiber.depth * 1.4) + "rem";
+    line.appendChild(tagged("span", "name", "#" + fiber.id));
+    line.appendChild(text(" running "));
+    // Age first, as a fiber dump prints it: the number that identifies a stuck
+    // program is how long something has been running.
+    line.appendChild(tagged("span", "age", micros(fiber.ageMicros)));
+    if (fiber.operation) {
+      line.appendChild(tagged("span", "took", ", forked in " + fiber.operation));
+    }
+    into.appendChild(line);
+  }
+}
+
+function bytes(value) {
+  if (!value || value <= 0) return "-";
+  if (value < 1024) return value + "B";
+  if (value < 1048576) return (value / 1024).toFixed(1) + "KiB";
+  if (value < 1073741824) return (value / 1048576).toFixed(1) + "MiB";
+  return (value / 1073741824).toFixed(2) + "GiB";
+}
+
+function percent(share) {
+  return (100 * (share || 0)).toFixed(1) + "%";
+}
+
+// A gauge: one number now, with the thing it should be read against.
+function gauge(into, name, value, of, bars) {
+  const held = tagged("div", "gauge");
+  held.appendChild(tagged("span", "name", name));
+  held.appendChild(tagged("div", "value", value));
+  if (of) held.appendChild(tagged("div", "of", of));
+  if (bars && bars.length) {
+    const meter = tagged("div", "meter");
+    // Shares of one whole, so a bar that would overflow is clamped rather
+    // than allowed to run past the meter it is inside.
+    let left = 100;
+    for (const bar of bars) {
+      const width = Math.max(0, Math.min(left, 100 * bar.share));
+      left -= width;
+      const part = tagged("span", bar.kind);
+      part.style.width = width + "%";
+      part.title = bar.title || "";
+      meter.appendChild(part);
+    }
+    held.appendChild(meter);
+    held.appendChild(tagged("div", "legend", bars.map((bar) => bar.legend)
+      .filter(Boolean).join("  ")));
+  }
+  into.appendChild(held);
+}
+
+function renderGauges(into, process) {
+  into.replaceChildren();
+  if (!process || !process.sampled) {
+    into.appendChild(tagged("p", "empty", "no series to sample"));
+    return;
+  }
+  gauge(into, "heap", bytes(process.heapBytes),
+    "of a " + bytes(process.goalBytes) + " goal \u00b7 " + process.heapObjects + " objects",
+    [{ kind: "used", share: process.goalBytes ? process.heapBytes / process.goalBytes : 0,
+       legend: "" }]);
+
+  const goroutines = process.goroutines || 1;
+  gauge(into, "goroutines", process.goroutines,
+    "on " + process.threads + " thread(s)", [
+      { kind: "used", share: process.running / goroutines,
+        legend: process.running + " running" },
+      { kind: "runnable", share: process.runnable / goroutines,
+        legend: process.runnable + " runnable" },
+      { kind: "waiting", share: process.waiting / goroutines,
+        legend: process.waiting + " waiting" },
+    ]);
+
+  gauge(into, "busy", percent(process.busy),
+    "of " + process.threads + " thread(s) over " + micros(process.overMicros), [
+      { kind: "used", share: process.busy, legend: "" },
+    ]);
+
+  gauge(into, "collecting", percent(process.collecting),
+    "of CPU used", [
+      { kind: "gc", share: process.collecting, legend: process.gcCycles + " collections" },
+    ]);
+
+  gauge(into, "allocating", bytes(process.bytesPerSecond) + "/s",
+    bytes(process.allocatedBytes) + " in window");
+
+  gauge(into, "stacks", bytes(process.stackBytes),
+    bytes(process.totalBytes) + " mapped");
+}
+
+// The charts are uPlot's: axes, a cursor that reads the value under the
+// pointer off every series, and a legend. Drawn from the same points the
+// snapshot carries, and rebuilt in place rather than recreated, so the cursor
+// does not jump on a refresh.
+const drawn = new Map();
+
+function chartOf(into, key, title, series, values, options) {
+  const width = into.clientWidth || 520;
+  const quiet = colour("--quiet");
+  const edge = colour("--edge");
+  const held = drawn.get(key);
+  if (held && held.plot) {
+    held.plot.setSize({ width: width, height: options.height });
+    held.plot.setData(values);
+    return;
+  }
+  const panel = tagged("div", "chart");
+  into.appendChild(panel);
+  const plot = new uPlot({
+    title: title,
+    width: width,
+    height: options.height,
+    // The x values are seconds ago, so the axis reads as a window rather than
+    // as a clock: a chart of the last two minutes says "-120s" to "0", and
+    // nobody has to know when the program started.
+    scales: { x: { time: false } },
+    // The axes are drawn on a canvas, so their colour is an option here and
+    // not a stylesheet rule: setting it in CSS left black labels on a dark
+    // ground. Read from the page's tokens, so both themes are legible.
+    axes: [
+      { stroke: quiet, values: (self, ticks) => ticks.map((tick) => tick.toFixed(0) + "s"),
+        grid: { show: false }, ticks: { stroke: edge, size: 3 } },
+      { stroke: quiet, values: (self, ticks) => ticks.map(options.format),
+        grid: { stroke: edge, width: 1, dash: [1, 3] },
+        ticks: { stroke: edge, size: 3 }, size: options.axisWidth || 60 },
+    ],
+    cursor: { y: false, points: { size: 5 } },
+    legend: { live: true },
+    series: series,
+  }, values, panel);
+  drawn.set(key, { plot: plot });
+}
+
+function renderCharts(into, process) {
+  if (typeof uPlot === "undefined") {
+    into.replaceChildren(tagged("p", "empty", "chart library unavailable"));
+    return;
+  }
+  const points = (process && process.points) || [];
+  if (points.length < 2) {
+    drawn.clear();
+    into.replaceChildren(tagged("p", "empty", "two readings needed"));
+    return;
+  }
+  if (into.querySelector(".empty")) into.replaceChildren();
+
+  // Seconds ago, so the newest reading sits at zero on the right.
+  const newest = points[points.length - 1].atMicros;
+  const ago = points.map((point) => (point.atMicros - newest) / 1e6);
+
+  chartOf(into, "memory", "memory", [
+    when(),
+    { label: "heap", stroke: colour("--accent"), fill: shade("--accent"), width: 1.5,
+      value: (self, value) => bytes(value) },
+    { label: "stacks", stroke: colour("--open"), width: 1.5,
+      value: (self, value) => bytes(value) },
+    { label: "goal", stroke: colour("--quiet"), width: 1, dash: [3, 3],
+      value: (self, value) => bytes(value) },
+  ], [
+    ago,
+    points.map((point) => point.heapBytes),
+    points.map((point) => point.stackBytes),
+    points.map((point) => point.goalBytes),
+  ], { height: 130, format: bytes, axisWidth: 66 });
+
+  chartOf(into, "allocating", "allocating per second", [
+    when(),
+    { label: "bytes/s", stroke: colour("--warn"), fill: shade("--warn"), width: 1.5,
+      value: (self, value) => bytes(value) + "/s" },
+  ], [ago, points.map((point) => point.bytesPerSecond)],
+    { height: 110, format: bytes, axisWidth: 66 });
+
+  chartOf(into, "compute", "compute", [
+    when(),
+    { label: "goroutines", stroke: colour("--open"), width: 1.5,
+      value: (self, value) => String(value) },
+    { label: "runnable", stroke: colour("--warn"), width: 1.5,
+      value: (self, value) => String(value) },
+    { label: "busy", stroke: colour("--accent"), width: 1.5, scale: "%",
+      value: (self, value) => percent(value) },
+  ], [
+    ago,
+    points.map((point) => point.goroutines),
+    points.map((point) => point.runnable),
+    points.map((point) => point.busy),
+  ], { height: 130, format: (value) => String(Math.round(value)), axisWidth: 40 });
+}
+
+// when is the x series: the cursor reads a position off it, so it needs a name
+// and a format. Left as uPlot's default it read "Value: -33.512", which says
+// neither what the number is nor what it is measured in.
+function when() {
+  return {
+    label: "when",
+    value: (self, value) => value == null ? "--"
+      : (value >= -0.05 ? "now" : Math.abs(value).toFixed(1) + "s ago"),
+  };
+}
+
+// colour reads a token off the page, so the charts follow the viewer's theme
+// rather than carrying a palette of their own.
+function colour(token) {
+  return getComputedStyle(document.documentElement).getPropertyValue(token).trim() || "#888";
+}
+
+function shade(token) {
+  return "color-mix(in srgb, " + colour(token) + " 20%, transparent)";
+}
+
+function renderTable(into, columns, rows, cell) {
+  into.replaceChildren();
+  if (!rows || rows.length === 0) {
+    into.appendChild(tagged("caption", "empty", "nothing"));
+    return;
+  }
+  const head = document.createElement("tr");
+  for (const column of columns) {
+    head.appendChild(tagged("th", column.numeric ? "n" : "", column.name));
+  }
+  into.appendChild(head);
+  for (const row of rows) {
+    const line = document.createElement("tr");
+    for (const column of columns) {
+      line.appendChild(tagged("td", column.numeric ? "n" : "", cell(row, column.name)));
+    }
+    into.appendChild(line);
+  }
+}
+
+const measurementColumns = [
+  { name: "kind" }, { name: "operation" }, { name: "status" },
+  { name: "count", numeric: true }, { name: "median", numeric: true },
+  { name: "longest", numeric: true }, { name: "waited", numeric: true },
+];
+
+const routeColumns = [
+  { name: "method" }, { name: "path" }, { name: "answers", numeric: true },
+  { name: "summary" },
+];
+
+const costColumns = [
+  { name: "route" }, { name: "runs", numeric: true },
+  { name: "per run", numeric: true }, { name: "allocated", numeric: true },
+  { name: "cpu", numeric: true }, { name: "longest", numeric: true },
+  { name: "collections", numeric: true },
+];
+
+function renderCosts(into, caveat, costs) {
+  // One clause, not a paragraph: process-wide means concurrent work is in
+  // these numbers, and the handler's window excludes the codecs around it.
+  caveat.textContent = costs && costs.length ? "process-wide, handler only" : "";
+  renderTable(into, costColumns, costs, (row, column) => {
+    switch (column) {
+      case "route": return row.name;
+      case "runs": return row.times;
+      case "per run": return bytes(row.perRunBytes);
+      case "allocated": return bytes(row.allocatedDuring);
+      case "cpu": return row.cpuSecondsDuring
+        ? (1000 * row.cpuSecondsDuring).toFixed(1) + "ms" : "-";
+      case "longest": return micros(row.longestMicros);
+      case "collections": return row.collections || "-";
+    }
+  });
+}
+
+function render(snapshot) {
+  el("taken").textContent = "read at " + new Date(snapshot.takenAt).toLocaleTimeString();
+  el("dropped").textContent = snapshot.dropped
+    ? snapshot.dropped + " dropped"
+    : "";
+  latest = snapshot;
+  renderGauges(el("gauges"), snapshot.process);
+  renderCharts(el("charts"), snapshot.process);
+  renderCosts(el("costs"), el("costcaveat"), snapshot.costs);
+  renderFibers(el("fibers"), snapshot.fibers);
+  el("owned").textContent = snapshot.owned && snapshot.owned.counted
+    ? snapshot.owned.fibers + " fiber(s), " + snapshot.owned.resources +
+      " resource(s) owned"
+    : "not counting (needs debug tracking)";
+  renderOpen(el("open"), snapshot.openSpans);
+  const traces = tracesOf(snapshot.trace);
+  renderTraces(el("traces"), traces);
+  renderHot(el("hot"), traces);
+  renderWaterfall(el("waterfall"), el("details"), traces);
+  el("loose").textContent = snapshot.looseEvents
+    ? snapshot.looseEvents + " event(s) outside every span"
+    : "";
+  renderTable(el("measurements"), measurementColumns, snapshot.measurements, (row, column) => {
+    switch (column) {
+      case "kind": return row.kind;
+      case "operation": return row.operation;
+      case "status": return row.status || "-";
+      case "count": return row.count;
+      case "median": return micros(row.medianMicros) || "-";
+      case "longest": return micros(row.maxMicros) || "-";
+      case "waited": return micros(row.waitedMicros) || "-";
+    }
+  });
+  renderRoutes(el("routes"), snapshot.routes);
+}
+
+// The surface, with the paths that can be opened as links.
+//
+// A GET whose pattern captures nothing is a URL: it can be followed. One with
+// a {capture} is a pattern and not an address, and a link to it would 404 --
+// so it stays text, and the pattern is what a reader wanted to see anyway.
+function renderRoutes(into, routes) {
+  into.replaceChildren();
+  if (!routes || routes.length === 0) {
+    into.appendChild(tagged("caption", "empty", "none declared"));
+    return;
+  }
+  const head = document.createElement("tr");
+  for (const column of routeColumns) {
+    head.appendChild(tagged("th", column.numeric ? "n" : "", column.name));
+  }
+  into.appendChild(head);
+  for (const route of routes) {
+    const line = document.createElement("tr");
+    line.appendChild(tagged("td", "", route.method));
+    const path = tagged("td", "");
+    if (route.method === "GET" && !route.path.includes("{")) {
+      const link = document.createElement("a");
+      link.href = route.path;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.appendChild(text(route.path));
+      path.appendChild(link);
+    } else {
+      path.appendChild(text(route.path));
+    }
+    line.appendChild(path);
+    line.appendChild(tagged("td", "n", route.status));
+    line.appendChild(tagged("td", "", route.summary || ""));
+    into.appendChild(line);
+  }
+}
+
+// The open spans, which are a list and not a timeline: each is still running,
+// so there is no window to place them in.
+function renderOpen(into, spans) {
+  into.replaceChildren();
+  if (!spans || spans.length === 0) {
+    into.appendChild(tagged("p", "empty", "nothing"));
+    return;
+  }
+  for (const span of spans) {
+    const line = tagged("div", "span");
+    line.appendChild(tagged("span", "name", span.name || "(unnamed)"));
+    line.appendChild(text(" "));
+    line.appendChild(tagged("span", statusClass(span), "open "));
+    line.appendChild(tagged("span", "age", micros(span.ageMicros)));
+    if (span.source) line.title = span.source;
+    into.appendChild(line);
+  }
+}
+
+// latest is the last snapshot, kept so choosing a trace redraws from it
+// rather than waiting for the next refresh.
+let latest = null;
+
+function redraw() {
+  if (latest) render(latest);
+}
+
+let reading = false;
+
+async function read() {
+  if (reading) return;
+  reading = true;
+  try {
+    const response = await fetch(source, { headers: { accept: "application/json" } });
+    if (!response.ok) throw new Error("the inspector answered " + response.status);
+    render(await response.json());
+    el("fault").textContent = "";
+  } catch (whatever) {
+    // Said rather than swallowed: an inspector that silently stops refreshing
+    // looks exactly like a program that has stopped doing anything.
+    el("fault").textContent = String(whatever.message || whatever);
+  } finally {
+    reading = false;
+  }
+}
+
+let timer = null;
+
+function pace() {
+  if (timer !== null) clearInterval(timer);
+  const every = Number(el("every").value);
+  timer = every > 0 ? setInterval(read, every) : null;
+}
+
+// The library is fetched from this same server and nothing else is: no CDN,
+// no font, no third party. A tool that only works where the internet is
+// reachable is not a debugging tool.
+function loaded() {
+  return new Promise((resolve, reject) => {
+    const style = document.createElement("link");
+    style.rel = "stylesheet";
+    style.href = mounted + "/uplot.css";
+    document.head.appendChild(style);
+
+    const script = document.createElement("script");
+    script.src = mounted + "/uplot.js";
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("the chart library could not be loaded"));
+    document.head.appendChild(script);
+  });
+}
+
+el("now").addEventListener("click", read);
+el("every").addEventListener("change", pace);
+// Reading while the tab is hidden is work nobody is looking at.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+    return;
+  }
+  read();
+  pace();
+});
+
+// The charts need the library; nothing else does, so a failure to load it is
+// reported and the rest of the page still renders.
+loaded().catch((whatever) => {
+  el("fault").textContent = String(whatever.message || whatever);
+}).finally(() => {
+  read();
+  pace();
+});
+</script>
+</body>
+</html>

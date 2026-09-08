@@ -1,0 +1,8 @@
+github.com/mbauer83/effect-golang v0.1.0 h1:Bo4DvswEtweD68t4yi6T3icWriqpjpUG3LiE/SjG+Do=
+github.com/mbauer83/effect-golang v0.1.0/go.mod h1:daWwngjiS9LTB+4fCQJnAo/dL5jRdZwLsGb0ICrqXqQ=
+github.com/mbauer83/effect-golang-observe v0.1.0 h1:o0KURJCaKtdlM3DSDusJidUS4mTFiv3NppfjwJIB6uU=
+github.com/mbauer83/effect-golang-observe v0.1.0/go.mod h1:yBfI8625P88ErIzEheajFIoMhHl9Yv3bPnmaDP4anKc=
+github.com/mbauer83/effect-golang-schema v0.1.0 h1:ZIKeIxVcttH6GUpqEOoUdHUe+Ty1eJN5/h9HOffati0=
+github.com/mbauer83/effect-golang-schema v0.1.0/go.mod h1:Aa3gf4L6g07igbtuj07t+rjR4myfYZBb7qnE/Itrwpc=
+github.com/mbauer83/effect-golang-web v0.2.0 h1:MvdyuXuH7GJsvSPhaJG4Tos7Vey94yGIs0OzPHplc+k=
+github.com/mbauer83/effect-golang-web v0.2.0/go.mod h1:ht4MvAXVfOOhbPd9DHehU4nVEhICm/CZ0Z9EhXmXzC0=
