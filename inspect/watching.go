@@ -1,6 +1,7 @@
 package inspect
 
-// Making a request show up in a trace.
+// Making a program's traffic visible, without changing how the program is
+// written.
 
 import (
 	"log/slog"
@@ -10,80 +11,61 @@ import (
 	"github.com/mbauer83/effect-golang/effect"
 )
 
-// Watching gives an endpoint its handler and makes the work a span named for
-// the route.
+// Observing is the setting that makes a surface's traffic visible: every route
+// becomes a span named for itself, annotated with its method and pattern.
 //
-// A drop-in for web.Handle. A runtime brackets what a program tells it to
-// bracket, so a handler that opens no span of its own contributes nothing to a
-// trace: a request would appear as a fiber that ran and nothing more. This is
-// the one line that changes that for a whole surface.
+// Applied once to the assembled surface and nowhere else:
+//
+//	surface, err := web.NewRoutes(routes...)
+//	surface = surface.Wrapping(inspect.Observing(costs))
+//
+// Which is the whole integration. Nothing about how the routes are declared or
+// handled changes, so observation cannot be forgotten one route at a time --
+// and turning it off is not applying it, which a caller can decide from a flag
+// at start-up.
+//
+// A runtime brackets what a program tells it to bracket, so without this a
+// handler that opens no span of its own contributes nothing to a trace: a
+// request appears as a fiber that ran and nothing more.
 //
 // The name is the method and the route's *pattern* -- "GET /books/{title}" --
 // and never the path that was asked for. A concrete path is an unbounded
-// value, and the same rule that forbids it as a metric label forbids it as a
-// span name: a series per title is a series per request, which is the failure
-// mode metrics exists to avoid.
-func Watching[R, E, In, Out any](
-	endpoint web.Endpoint[In, Out],
-	handle func(In) effect.Effect[R, E, Out],
-) web.Route[R, E] {
-	return Accounted[R, E](nil, endpoint, handle)
+// value, and the rule that forbids it as a metric label forbids it as a span
+// name: a series per title is a series per request.
+func Observing[R, E any](costs *process.Costs) web.Matched[R, E] {
+	return func(
+		declaration web.Declaration,
+		handler web.Handler[R, E],
+	) web.Handler[R, E] {
+		name := NameOf(declaration)
+		method := slog.String("method", declaration.Method)
+		route := slog.String("route", declaration.Path)
+		return func(request web.Request) effect.Effect[R, E, web.Response] {
+			// Annotate outside WithSpan, not inside. Metadata supplied inside
+			// a span applies to the work within it and not to the span's own
+			// start and end, so annotating inside put the method and the route
+			// on nothing a reader of the trace can see. Measured, not
+			// reasoned: the same span reports [] one way round and
+			// [method=..., route=...] the other.
+			return process.Costing(costs, name, handler(request)).
+				Named(name).
+				WithSpan(name).
+				Annotate(method, route)
+		}
+	}
 }
 
-// Accounted is Watching, and also records what the process spent while the
-// work ran.
-//
-// Two functions rather than one with an argument to ignore, because the cost
-// of measuring is real: two reads of runtime/metrics per request. A program
-// that wants its traffic in a trace and not its allocation in an account uses
-// Watching and pays for neither.
-//
-// The account is keyed by the same route name the span is, so it is bounded by
-// the surface. What it holds is process-wide over each request's window --
-// concurrent requests are in each other's numbers -- and the field names in
-// the account say so.
-//
-// The window is the handler's, not the request's. A Route decodes the request,
-// runs the handler and encodes the response, and what this wraps is the
-// handler: the span and the account both cover the work the application wrote
-// and not the codecs around it. A route whose response is expensive to encode
-// will look cheaper here than it is, which is worth knowing before drawing a
-// conclusion from the number.
-func Accounted[R, E, In, Out any](
-	costs *process.Costs,
-	endpoint web.Endpoint[In, Out],
-	handle func(In) effect.Effect[R, E, Out],
-) web.Route[R, E] {
-	declared := endpoint.Declaration()
-	name := NameOf(declared)
-	return web.Handle(endpoint, func(input In) effect.Effect[R, E, Out] {
-		// Annotate outside WithSpan, not inside. Metadata supplied inside a
-		// span applies to the work within it and not to the span's own
-		// start and end -- so annotating inside put the method and the route
-		// on nothing a reader of the trace can see. Measured, not reasoned:
-		// the same span with the same annotation reports [] one way round and
-		// [method=..., route=...] the other.
-		return process.Costing(costs, name, handle(input)).
-			Named(name).
-			WithSpan(name).
-			Annotate(
-				slog.String("method", declared.Method),
-				slog.String("route", declared.Path),
-			)
-	})
-}
-
-// NameOf is the span name Watching gives a declaration.
+// NameOf is the span name a route is observed under.
 func NameOf(declaration web.Declaration) string {
 	return declaration.Method + " " + declaration.Path
 }
 
-// Names are the span names a surface's routes are watched under.
+// Names are the span names a surface's routes are observed under.
 //
-// It is what a caller passes to metrics.Naming, which closes the loop: the
-// vocabulary of a bounded aggregate comes from the same declarations that
-// dispatch the requests, so a route added to the surface is measured without
-// anybody remembering to add its name in a second place.
+// It is what a caller passes to metrics.Naming and process.Accounting, which
+// closes the loop: the vocabulary of a bounded aggregate comes from the same
+// declarations that dispatch the requests, so a route added to the surface is
+// measured without anybody remembering to add its name in a second place.
 //
 //	collected := metrics.Collect(metrics.Naming(inspect.Names(surface.Declarations())...))
 func Names(declarations []web.Declaration) []string {

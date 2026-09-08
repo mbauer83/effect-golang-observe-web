@@ -13,8 +13,8 @@ the two things only a web module can:
   the inspector shows the surface beside the traffic through it.
 - **it can name a request.** A runtime brackets what a program tells it to
   bracket, so a handler that opens no span of its own contributes nothing to a
-  trace. `inspect.Watching` in place of `web.Handle` makes every request a span
-  named for its route — the *pattern*, never the path that was asked for.
+  trace. One setting on the assembled surface makes every request a span named
+  for its route — the *pattern*, never the path that was asked for.
 
 The inspector is itself an effect-golang-web program, mounted inside the one it
 inspects. That is not a flourish: a tool for inspecting this stack that was not
@@ -25,7 +25,7 @@ built on it would be a tool nobody had tried the stack with.
 | Area | State |
 |---|---|
 | [The inspector: page, snapshot, contract](docs/reference/inspect.md) | usable |
-| [Naming requests: `Watching`, `Names`](docs/reference/inspect.md) | usable |
+| [Naming requests: `Observing`, `Names`](docs/reference/inspect.md) | usable; one setting on the surface, nothing at the call sites |
 | [Memory and compute: gauges, charts, cost per route and stage](docs/reference/inspect.md) | usable; process-wide, because Go reports no per-goroutine allocation or CPU |
 | [The page: timeline, hot paths, fibers, spans, surface](docs/reference/inspect.md) | usable; charts by vendored uPlot, served from the inspector |
 | Push protocol to an out-of-process tool | absent, and [deliberately](docs/reference/inspect.md) |
@@ -41,15 +41,19 @@ watched := inspect.Watched{
     Owned:     runtime.LiveWork,
 }
 
+// The routes, written exactly as they would be without any of this.
 mine := []web.Route[effect.Unit, Refusal]{
-    inspect.Watching(ListNotes, list),   // web.Handle, plus a span per request
-    inspect.Watching(AddNote, add),
+    web.Handle(ListNotes, list),
+    web.Handle(AddNote, add),
 }
 described, _ := web.NewRoutes(mine...)
 watched.Surface = described.Declarations
 
 inspecting, _ := inspect.Routes[effect.Unit, Refusal](watched, inspect.DefaultAt)
 surface, _ := web.NewRoutes(append(mine, inspecting...)...)
+
+// One setting. Not applying it is how a program turns observation off.
+surface = surface.Wrapping(inspect.Observing[effect.Unit, Refusal](watched.Costs))
 ```
 
 One surface, so one matcher dispatches everything: the inspector is not a
@@ -59,7 +63,7 @@ Then open `/inspect`.
 ## Layout
 
 ```text
-inspect/                    Watched, Snapshot, Surface, Routes, Watching, Accounted
+inspect/                    Watched, Snapshot, Surface, Routes, Observing
 inspect/page.html           the page, one checked-in document
 inspect/assets/             the vendored chart library, and its licence
 examples/inspected/         a small web program with the inspector mounted

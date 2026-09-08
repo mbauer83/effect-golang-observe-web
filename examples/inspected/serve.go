@@ -43,24 +43,24 @@ var (
 //
 // One surface, so one matcher dispatches everything: the inspector is not a
 // second server on a second port that has to be found, configured and secured
-// separately. inspect.Watching in place of web.Handle is the whole of making
-// the traffic visible -- every request becomes a span named for its route.
+// separately.
+//
+// The routes are declared and handled exactly as they would be without any of
+// this -- web.Handle, nothing else -- and the observation is one line further
+// down. That is the point: a program does not get written differently because
+// somebody wants to watch it.
 func Surface(store *Store, watched inspect.Watched) (web.Routes[effect.Unit, Refusal], error) {
-	// Accounted rather than Watching, because this example is what the
-	// inspector's cost panel is demonstrated with: it names each route's work
-	// as a span and records what the process spent while it ran.
 	mine := []web.Route[effect.Unit, Refusal]{
-		inspect.Accounted(watched.Costs, ListNotes,
-			func(effect.Unit) storing[[]Note] { return store.All() }),
-		inspect.Accounted(watched.Costs, AddNote, store.Add),
+		web.Handle(ListNotes, func(effect.Unit) storing[[]Note] { return store.All() }),
+		web.Handle(AddNote, store.Add),
 		// Declared before FindNote, because /notes/report and
 		// /notes/{title} could both match a request for the first -- and a
 		// literal segment beats a capture, so the matcher prefers this one
 		// whatever the order. Stated in this order anyway, so a reader of the
 		// list is not left working that out.
-		inspect.Accounted(watched.Costs, Summarise,
+		web.Handle(Summarise,
 			func(effect.Unit) storing[Report] { return Reported(store, watched.Costs) }),
-		inspect.Accounted(watched.Costs, FindNote, store.Find),
+		web.Handle(FindNote, store.Find),
 	}
 	// The inspector is given the declarations of the program's own routes, and
 	// not its own: what a person wants to see is the surface being served, and
@@ -75,7 +75,14 @@ func Surface(store *Store, watched inspect.Watched) (web.Routes[effect.Unit, Ref
 	if err != nil {
 		return web.Routes[effect.Unit, Refusal]{}, err
 	}
-	return web.NewRoutes(append(mine, inspecting...)...)
+	assembled, err := web.NewRoutes(append(mine, inspecting...)...)
+	if err != nil {
+		return web.Routes[effect.Unit, Refusal]{}, err
+	}
+	// The whole of the integration: one setting on the surface. Not applying
+	// it is how a program turns observation off, which a caller can decide
+	// from a flag without assembling anything differently.
+	return assembled.Wrapping(inspect.Observing[effect.Unit, Refusal](watched.Costs)), nil
 }
 
 // Serve runs the surface on a listener until its scope closes.

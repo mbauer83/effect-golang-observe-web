@@ -1,9 +1,8 @@
 # Inspector reference
 
 ```go
-inspect.Watching(endpoint, handle) web.Route[R, E]         // web.Handle, plus a span
-inspect.Accounted(costs, endpoint, handle) web.Route[R, E] // and what it spent
-inspect.Names(declarations) []string                       // the metric vocabulary
+inspect.Observing[R, E](costs) web.Matched[R, E]   // the whole integration
+inspect.Names(declarations) []string              // the metric vocabulary
 inspect.NameOf(declaration) string
 
 inspect.Routes[R, E](watched, at) ([]web.Route[R, E], error)
@@ -19,18 +18,43 @@ inspect.Stylesheet() []byte
 inspect.Licence() []byte
 ```
 
-## Naming a request
+## The integration is one setting
 
-A runtime brackets what a program tells it to bracket. A handler that opens no
-span of its own contributes nothing to a trace — a request appears as a fiber
-that ran and nothing more. `Watching` is a drop-in for `web.Handle` and is the
-one line that changes that for a whole surface.
+```go
+surface, err := web.NewRoutes(routes...)          // written as any program writes them
+surface = surface.Wrapping(inspect.Observing[R, E](costs))
+```
+
+That is all of it. **Nothing about how the routes are declared or handled
+changes**, so observation cannot be forgotten one route at a time, and the
+route somebody adds this morning is covered. Turning it off is not applying it,
+which a caller can decide from a flag at start-up:
+
+```go
+if settings.Observing {
+    surface = surface.Wrapping(inspect.Observing[R, E](costs))
+}
+```
+
+An earlier version of this module asked a program to swap `web.Handle` for a
+different constructor at every route. That was bad integration for exactly
+those reasons, and the fix was to add the missing seam to
+[`web`](https://github.com/mbauer83/effect-golang-web/blob/main/docs/reference/web.md)
+— `Matched` and `Routes.Wrapping` — rather than to keep routing around it.
+
+A runtime brackets what a program tells it to bracket, so without the setting a
+handler that opens no span of its own contributes nothing to a trace: a request
+appears as a fiber that ran and nothing more.
 
 **The name is the method and the route's pattern**, `GET /books/{title}`, and
 never the path that was asked for. A concrete path is an unbounded value, and
 the rule that forbids it as a
 [metric label](https://github.com/mbauer83/effect-golang-observe/blob/main/docs/reference/metrics.md)
 forbids it as a span name: a series per title is a series per request.
+
+The wrapper covers the route's whole work — the codecs as well as the handler,
+because it wraps what dispatch calls. A route whose response is expensive to
+encode is expensive to serve.
 
 `Names` closes the loop. The vocabulary of a bounded aggregate comes from the
 same declarations that dispatch the requests, so a route added to the surface
@@ -129,17 +153,13 @@ will render.
 
 ## Measuring a stage
 
-`Accounted` is `Watching` plus what the process spent while the handler ran.
-Two functions rather than one with an argument to ignore, because the cost is
-real: two reads of `runtime/metrics` per request.
+`Observing` accounts each route under its own name when it is given a
+`*process.Costs`, and a `nil` turns that half off: the cost is real, two reads
+of `runtime/metrics` per request.
 
-**The window is the handler's, not the request's.** A route decodes, runs the
-handler and encodes; what these wrap is the handler. A route whose response is
-expensive to encode looks cheaper here than it is.
-
-**Go's CPU accounting does not move over a fast window**, so a handler
-answering in twenty microseconds reports zero CPU. The allocation counters are
-exact and do not have this problem.
+**Go's CPU accounting does not move over a fast window**, so a route answering
+in twenty microseconds reports zero CPU. The allocation counters are exact and
+do not have this problem.
 
 Inside a handler, `process.Measured` gives a stage its own span, name and
 account in one call — which is what makes a timeline worth drawing and a hot
