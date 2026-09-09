@@ -80,7 +80,7 @@
   .scroll.short { height: 9rem; }
   /* The selected name's own box: what every run of it cost, which is the
      question the span details deliberately do not answer. */
-  #account { height: 20rem; }
+  #account { height: 31rem; }
   #account .name { margin-bottom: 0.3rem; }
   #account dl { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 0.1rem 0.7rem; margin: 0 0 0.5rem; }
   #account dt { color: var(--quiet); }
@@ -195,7 +195,7 @@
   .bar > .covered { background-image: none; background-color: color-mix(in srgb, var(--panel) 55%, transparent); opacity: 1; }
   .mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: 0.55; }
   .mark.status-typed_failure, .mark.status-defect { background: var(--bad); opacity: 0.9; }
-  .details { border-top: 1px dashed var(--edge); margin-top: 0.5rem; padding-top: 0.5rem; font-size: 0.8rem; height: 13rem; overflow-y: auto; }
+  .details { border-top: 1px dashed var(--edge); margin-top: 0.5rem; padding-top: 0.5rem; font-size: 0.8rem; height: 17rem; overflow-y: auto; }
   /* A fixed term column, because an automatic one is as wide as the longest
      term in the panel -- so a value arriving two seconds later rewrapped every
      line beside it. Values that have no natural break, a path and an identity,
@@ -262,8 +262,8 @@
     <div class="details" id="account">
       <div class="name" id="accountname"></div>
       <dl id="accountfacts"></dl>
-      <div id="accountbands"></div>
       <div id="accountchart"></div>
+      <div id="accountbands"></div>
     </div>
   </section>
   <section>
