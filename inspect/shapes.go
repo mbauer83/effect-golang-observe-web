@@ -23,10 +23,15 @@ package inspect
 type Span struct {
 	ID       int64
 	ParentID int64
-	Depth    int64
-	Name     string
-	Source   string
-	Status   string
+	// Trace is the identity of the trace this span belongs to: the runtime's
+	// span identity is a counter and names nothing outside one process, so a
+	// trace referred to by a person or held across a restart needs this.
+	// Empty for a span whose root is not in this reading.
+	Trace  string
+	Depth  int64
+	Name   string
+	Source string
+	Status string
 	// StartMicros is the offset from the earliest span in this reading, so a
 	// page can place the bars without knowing what clock they came from.
 	StartMicros int64
@@ -193,11 +198,52 @@ type Point struct {
 // because a reader who takes it for attribution will draw the wrong
 // conclusion, and a paragraph elsewhere will not stop them.
 type Cost struct {
-	Name             string
-	Times            int64
-	AllocatedDuring  int64
-	PerRunBytes      int64
+	Name            string
+	Times           int64
+	AllocatedDuring int64
+	PerRunBytes     int64
+	// ObjectsPerRun is how many allocations a run made and MeanObjectBytes
+	// their average size. In Go the count is usually the more actionable of
+	// the two: an allocation costs tens of nanoseconds and a pointer for the
+	// collector to chase whatever its size.
+	ObjectsPerRun    int64
+	MeanObjectBytes  int64
 	CPUSecondsDuring float64
 	LongestMicros    int64
 	Collections      int64
+	// Sizes are the size classes the allocations fell into, smallest first,
+	// or empty when the account was not told to keep them. The disclosed
+	// layer: the bytes and the count first, what shapes they were second.
+	Sizes []SizeClass
+	// Runs are the recent runs of this name, newest first: what one span did,
+	// where the figures above are what the name costs on average. A span is
+	// matched to the run whose window ended inside it.
+	Runs []Run
+}
+
+// Run is one run of a name: when its window ended, on the same timeline the
+// spans are on, and what the process did during it.
+//
+// Which is how a span gets a figure of its own. The account is keyed by name
+// and averaged over every run of it, so a trace nobody is running any more
+// would keep changing its numbers -- and the run that allocated ten times the
+// usual amount would be invisible in the average, which is the run worth
+// finding.
+type Run struct {
+	// EndedMicros is the offset from the earliest span in this reading, so it
+	// can be compared against a span's window without either side knowing
+	// whose clock it came from. Zero when there are no spans to measure from.
+	EndedMicros int64
+	Micros      int64
+	Bytes       int64
+	Objects     int64
+}
+
+// SizeClass is one of Go's allocation size classes and how many allocations
+// fell in it.
+type SizeClass struct {
+	// AtMostBytes is the class's upper edge, and zero for the widest class,
+	// which has none.
+	AtMostBytes int64
+	Count       int64
 }

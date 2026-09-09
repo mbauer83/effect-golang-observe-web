@@ -62,9 +62,6 @@ func Surface(store *Store, watched inspect.Watched) (web.Routes[effect.Unit, Ref
 			func(effect.Unit) storing[Report] { return Reported(store, watched.Costs) }),
 		web.Handle(FindNote, store.Find),
 	}
-	// The inspector is given the declarations of the program's own routes, and
-	// not its own: what a person wants to see is the surface being served, and
-	// the inspector is the thing looking rather than the thing looked at.
 	described, err := web.NewRoutes(mine...)
 	if err != nil {
 		return web.Routes[effect.Unit, Refusal]{}, err
@@ -79,10 +76,19 @@ func Surface(store *Store, watched inspect.Watched) (web.Routes[effect.Unit, Ref
 	if err != nil {
 		return web.Routes[effect.Unit, Refusal]{}, err
 	}
+	// The inspector's routes are observed like the program's, deliberately.
+	// A tool's own load is part of what a program is doing, and hiding it
+	// would be the one measurement a reader could not check.
 	// The whole of the integration: one setting on the surface. Not applying
 	// it is how a program turns observation off, which a caller can decide
 	// from a flag without assembling anything differently.
-	return assembled.Wrapping(inspect.Observing[effect.Unit, Refusal](watched.Costs)), nil
+	// Measuring as well, so a trace shows decoding and encoding beside the
+	// handler and each of them says what it allocated: a large document to
+	// unmarshal is real time, and one bar for all three could not say which
+	// of them a slow request spent it in.
+	return assembled.
+		Measuring(inspect.Sampling(watched.Costs)).
+		Wrapping(inspect.Observing[effect.Unit, Refusal](watched.Costs)), nil
 }
 
 // Serve runs the surface on a listener until its scope closes.

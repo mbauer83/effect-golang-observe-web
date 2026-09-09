@@ -39,6 +39,10 @@ var spanSchema = schema.Struct[Span]("Span",
 	schema.FieldOf("parentId", schema.Int64(),
 		func(value Span) int64 { return value.ParentID },
 		func(value *Span, field int64) { value.ParentID = field }),
+	schema.FieldOf("trace", schema.Text(),
+		func(value Span) string { return value.Trace },
+		func(value *Span, field string) { value.Trace = field }).
+		Documented("Trace is the identity of the trace this span belongs to, which the runtime's span counter cannot be: it starts again at one in the next process."),
 	schema.FieldOf("depth", schema.Int64(),
 		func(value Span) int64 { return value.Depth },
 		func(value *Span, field int64) { value.Depth = field }).

@@ -156,15 +156,19 @@ func TestEveryRequestBecomesASpanNamedForItsRoutePattern(t *testing.T) {
 		}
 	}
 	// The one that refused is visible as such, which is the question a trace
-	// gets opened for.
-	failed := 0
+	// gets opened for -- and with the phases named, the failure is on the
+	// route and on the phase it came out of rather than on the route alone.
+	failed := map[string]int{}
 	for _, span := range read.Trace {
 		if span.Status == string(effect.EventStatusFailure) {
-			failed++
+			failed[span.Name]++
 		}
 	}
-	if failed != 1 {
-		t.Fatalf("expected the refused request to show as failed, got %d", failed)
+	if failed["GET /notes/{title}"] != 1 {
+		t.Fatalf("expected the refused request's route to show as failed, got %v", failed)
+	}
+	if failed["handling"] != 1 {
+		t.Fatalf("expected the failure attributed to the handling phase, got %v", failed)
 	}
 }
 

@@ -34,13 +34,28 @@ func TestAMeasuredStageAppearsAsASpanUnderItsRoute(t *testing.T) {
 	if root.Name == "" {
 		t.Fatalf("expected the route's own span, got %v", names(read.Trace))
 	}
+	// The surface is detailing its phases, so the route's own parts are
+	// spanned too and the stages sit inside the handling one: route ->
+	// handling -> stage. That is the shape a waterfall shows, and asserting
+	// the relationship rather than a number keeps this readable when another
+	// phase is added.
+	handling, phased := under["handling"]
+	if !phased || handling.Depth != 1 {
+		t.Fatalf("expected a handling phase under the route, got %v", names(read.Trace))
+	}
+	for _, phase := range []string{"decoding", "encoding"} {
+		if span, present := under[phase]; !present || span.Depth != 1 {
+			t.Fatalf("expected the %s phase under the route, got %v", phase, names(read.Trace))
+		}
+	}
 	for _, stage := range []string{"read", "count", "digest", "rank"} {
 		span, present := under[stage]
 		if !present {
 			t.Fatalf("expected the %s stage under the route, got %v", stage, names(read.Trace))
 		}
-		if span.Depth != 1 {
-			t.Fatalf("expected %s one level under the route, got depth %d", stage, span.Depth)
+		if span.Depth != handling.Depth+1 {
+			t.Fatalf("expected %s inside the handling phase, got depth %d against %d",
+				stage, span.Depth, handling.Depth)
 		}
 		// Each stage begins after the route does and ends before it: a stage
 		// outside its route's window would mean the offsets share no origin.

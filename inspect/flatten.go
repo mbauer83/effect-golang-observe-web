@@ -21,12 +21,16 @@ import (
 // The offsets are relative because that is all a page needs and all it should
 // be given: an absolute clock reading would make the page's arithmetic depend
 // on whose clock it was.
-func flattenTree(assembled trace.Trace, now time.Time) []Span {
-	spans := assembled.Spans()
-	origin := earliest(spans)
+func flattenTree(assembled trace.Trace, now time.Time, origin time.Time) []Span {
 	flattened := []Span{}
+	// The walk visits a root before its children, so the identity computed at
+	// depth zero is the one the spans under it belong to.
+	identity := ""
 	assembled.Walk(func(span trace.Span, depth int) {
-		flattened = append(flattened, spanOf(span, int64(depth), now, origin))
+		if depth == 0 {
+			identity = trace.Identity(span)
+		}
+		flattened = append(flattened, spanOf(span, int64(depth), now, origin, identity))
 	})
 	return flattened
 }
@@ -49,7 +53,9 @@ func flatten(spans []trace.Span, now time.Time) []Span {
 	origin := earliest(spans)
 	flattened := make([]Span, 0, len(spans))
 	for _, span := range spans {
-		flattened = append(flattened, spanOf(span, 0, now, origin))
+		// No identity: this list has no tree, so which trace a span belongs to
+		// is a question it cannot answer -- its root may not be in the window.
+		flattened = append(flattened, spanOf(span, 0, now, origin, ""))
 	}
 	return flattened
 }
@@ -80,7 +86,13 @@ func appendFiber(into []Fiber, fiber trace.Fiber, depth int64, now time.Time) []
 
 // spanOf reads one span, with every offset measured from the same origin so
 // the spans and their events share one timeline.
-func spanOf(span trace.Span, depth int64, now time.Time, origin time.Time) Span {
+func spanOf(
+	span trace.Span,
+	depth int64,
+	now time.Time,
+	origin time.Time,
+	identity string,
+) Span {
 	events := make([]Event, 0, len(span.Events))
 	for _, event := range span.Events {
 		events = append(events, Event{
@@ -100,6 +112,7 @@ func spanOf(span trace.Span, depth int64, now time.Time, origin time.Time) Span 
 		StartMicros: offsetFrom(origin, span.Started),
 		ID:          int64(span.ID),
 		ParentID:    int64(span.ParentID),
+		Trace:       identity,
 		Depth:       depth,
 		Name:        span.Name,
 		Source:      span.Source,

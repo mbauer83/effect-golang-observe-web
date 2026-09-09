@@ -116,6 +116,17 @@ var costSchema = schema.Struct[Cost]("Cost",
 	schema.FieldOf("perRunBytes", schema.Int64(),
 		func(value Cost) int64 { return value.PerRunBytes },
 		func(value *Cost, field int64) { value.PerRunBytes = field }),
+	schema.FieldOf("objectsPerRun", schema.Int64(),
+		func(value Cost) int64 { return value.ObjectsPerRun },
+		func(value *Cost, field int64) { value.ObjectsPerRun = field }).
+		Documented("ObjectsPerRun is how many allocations a run made, which in Go is usually more actionable than their weight."),
+	schema.FieldOf("meanObjectBytes", schema.Int64(),
+		func(value Cost) int64 { return value.MeanObjectBytes },
+		func(value *Cost, field int64) { value.MeanObjectBytes = field }),
+	schema.FieldOf("sizes", schema.List(sizeClassSchema),
+		func(value Cost) []SizeClass { return value.Sizes },
+		func(value *Cost, field []SizeClass) { value.Sizes = field }).
+		Documented("Sizes are the size classes the allocations fell into, smallest first, or empty when the account was not told to keep them."),
 	schema.FieldOf("cpuSecondsDuring", schema.Float64(),
 		func(value Cost) float64 { return value.CPUSecondsDuring },
 		func(value *Cost, field float64) { value.CPUSecondsDuring = field }),
@@ -125,4 +136,34 @@ var costSchema = schema.Struct[Cost]("Cost",
 	schema.FieldOf("collections", schema.Int64(),
 		func(value Cost) int64 { return value.Collections },
 		func(value *Cost, field int64) { value.Collections = field }),
+	schema.FieldOf("runs", schema.List(runSchema),
+		func(value Cost) []Run { return value.Runs },
+		func(value *Cost, field []Run) { value.Runs = field }).
+		Documented("Runs are the recent runs of this name, newest first: what one span did, where the figures beside them are what the name costs on average."),
 ).Documented("Cost is what the process spent while one name's work ran.")
+
+var runSchema = schema.Struct[Run]("Run",
+	schema.FieldOf("endedMicros", schema.Int64(),
+		func(value Run) int64 { return value.EndedMicros },
+		func(value *Run, field int64) { value.EndedMicros = field }).
+		Documented("EndedMicros is the offset from the earliest span in this reading, so a run can be matched to the span whose window it ended in."),
+	schema.FieldOf("micros", schema.Int64(),
+		func(value Run) int64 { return value.Micros },
+		func(value *Run, field int64) { value.Micros = field }),
+	schema.FieldOf("bytes", schema.Int64(),
+		func(value Run) int64 { return value.Bytes },
+		func(value *Run, field int64) { value.Bytes = field }),
+	schema.FieldOf("objects", schema.Int64(),
+		func(value Run) int64 { return value.Objects },
+		func(value *Run, field int64) { value.Objects = field }),
+).Documented("Run is one run of a name: when its window ended, and what the process did during it.")
+
+var sizeClassSchema = schema.Struct[SizeClass]("SizeClass",
+	schema.FieldOf("atMostBytes", schema.Int64(),
+		func(value SizeClass) int64 { return value.AtMostBytes },
+		func(value *SizeClass, field int64) { value.AtMostBytes = field }).
+		Documented("AtMostBytes is the class's upper edge, and zero for the widest class, which has none."),
+	schema.FieldOf("count", schema.Int64(),
+		func(value SizeClass) int64 { return value.Count },
+		func(value *SizeClass, field int64) { value.Count = field }),
+).Documented("SizeClass is one of Go's allocation size classes.")

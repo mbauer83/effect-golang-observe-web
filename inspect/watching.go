@@ -75,3 +75,46 @@ func Names(declarations []web.Declaration) []string {
 	}
 	return named
 }
+
+// Sampling measures a surface's phases into the account, so decoding and
+// encoding say what they allocated and not only how long they took.
+//
+//	surface = surface.Measuring(inspect.Sampling(watched.Costs)).
+//	    Wrapping(inspect.Observing[Env, Refusal](watched.Costs))
+//
+// The transports name their phases and cannot measure them -- they depend on
+// nothing that reads a counter -- so the naming is theirs and the measuring is
+// here. Which is the same division as everywhere else in this package: the
+// program says what its parts are, and this says what they cost.
+//
+// The figures carry the caveat every figure in this package carries: Go reports
+// no per-goroutine allocation, so a phase's account is what the *process*
+// allocated while that phase ran, summed over its runs. On a surface serving
+// one request at a time that is the phase; on a busy one it includes whatever
+// else was running, and the account says how many runs it is averaged over so
+// a reader can judge it.
+func Sampling(costs *process.Costs) web.Sampling {
+	if costs == nil {
+		return nil
+	}
+	if !costs.Sizes() {
+		return func(phase string) func() {
+			before := process.Read()
+			return func() {
+				costs.Record(phase, process.Between(before, process.Read()))
+			}
+		}
+	}
+	// The account keeps the sizes, so the histogram is sampled at both ends
+	// too. Two paths rather than one that always samples it, for the reason
+	// Costing has two: an account that does not keep the detail should not pay
+	// to gather it.
+	return func(phase string) func() {
+		before, sizesBefore := process.Read(), process.ReadSizes()
+		return func() {
+			costs.RecordSpread(phase,
+				process.Between(before, process.Read()),
+				process.Spreading(sizesBefore, process.ReadSizes()))
+		}
+	}
+}

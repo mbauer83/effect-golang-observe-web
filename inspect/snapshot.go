@@ -103,13 +103,18 @@ func (watched Watched) Take(now time.Time) Snapshot {
 	if watched.Series != nil {
 		taken.Process = sampled(watched.Series)
 	}
-	if watched.Costs != nil {
-		taken.Costs = costsOf(watched.Costs.Snapshot())
-	}
+	// The window before the accounts, because both are placed on one timeline
+	// and the spans decide where it starts: a run's window is only
+	// attributable to a span if the two are measured from the same origin.
+	origin := time.Time{}
 	if watched.Window != nil {
 		assembled := trace.Assemble(watched.Window.Events())
-		taken.Trace = flattenTree(assembled, now)
+		origin = earliest(assembled.Spans())
+		taken.Trace = flattenTree(assembled, now, origin)
 		taken.LooseEvents = int64(len(assembled.Loose))
+	}
+	if watched.Costs != nil {
+		taken.Costs = costsOf(watched.Costs.Snapshot(), origin)
 	}
 	if watched.Collected != nil {
 		taken.Measurements = measurementsOf(watched.Collected.Snapshot())

@@ -4,6 +4,9 @@ package inspect
 // from.
 
 import (
+	"math"
+	"time"
+
 	"github.com/mbauer83/effect-golang-observe/process"
 )
 
@@ -71,7 +74,7 @@ func pointsOf(readings []process.Reading) []Point {
 	return points
 }
 
-func costsOf(accounted []process.Cost) []Cost {
+func costsOf(accounted []process.Cost, origin time.Time) []Cost {
 	shown := make([]Cost, 0, len(accounted))
 	for _, cost := range accounted {
 		shown = append(shown, Cost{
@@ -79,10 +82,64 @@ func costsOf(accounted []process.Cost) []Cost {
 			Times:            int64(cost.Times),
 			AllocatedDuring:  int64(cost.AllocatedDuring),
 			PerRunBytes:      int64(cost.PerRun()),
+			ObjectsPerRun:    int64(cost.ObjectsPerRun()),
+			MeanObjectBytes:  int64(cost.MeanObjectBytes()),
 			CPUSecondsDuring: cost.CPUSecondsDuring,
 			LongestMicros:    cost.Longest.Microseconds(),
 			Collections:      int64(cost.Collections),
+			Sizes:            sizesOf(cost.Spread.Banded()),
+			Runs:             runsOf(cost.Runs, origin),
 		})
 	}
 	return shown
+}
+
+// runsOf reads the recent runs onto the wire, offset from the same origin the
+// spans are, so the page can match a run to the span whose window it ended in
+// without either side being given a clock.
+//
+// A run that ended before the earliest span in this reading is left out: the
+// span it belonged to has already gone, so nothing in this reading can be
+// attributed to it -- and sending it would grow with the account's memory
+// rather than with what is being looked at.
+func runsOf(runs []process.Run, origin time.Time) []Run {
+	shown := make([]Run, 0, len(runs))
+	if origin.IsZero() {
+		return shown
+	}
+	for _, run := range runs {
+		if run.Ended.Before(origin) {
+			continue
+		}
+		shown = append(shown, Run{
+			EndedMicros: run.Ended.Sub(origin).Microseconds(),
+			Micros:      run.Change.Over.Microseconds(),
+			Bytes:       int64(run.Change.AllocatedBytes),
+			Objects:     int64(run.Change.AllocatedObjects),
+		})
+	}
+	return shown
+}
+
+// sizesOf reads the size bands onto the wire.
+//
+// Banded, not raw: Go has sixty-eight size classes and a busy program touches
+// nearly all of them, so the raw list is a wall rather than a disclosure --
+// and sending eleven names times sixty-eight classes per refresh would be
+// paying for the wall as well as reading it.
+//
+// The widest class has no upper bound -- it is reported as +Inf, which JSON
+// has no number for -- so it crosses as a zero and the page renders it as
+// "larger". A zero upper edge is impossible for a real class, so nothing is
+// ambiguous about it.
+func sizesOf(spread process.Spread) []SizeClass {
+	classes := make([]SizeClass, 0, len(spread.Classes))
+	for _, class := range spread.Classes {
+		edge := int64(0)
+		if !math.IsInf(class.AtMost, 1) {
+			edge = int64(class.AtMost)
+		}
+		classes = append(classes, SizeClass{AtMostBytes: edge, Count: int64(class.Count)})
+	}
+	return classes
 }

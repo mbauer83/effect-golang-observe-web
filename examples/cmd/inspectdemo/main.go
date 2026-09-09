@@ -112,16 +112,32 @@ func watching() (inspect.Watched, error) {
 	if err != nil {
 		return inspect.Watched{}, err
 	}
-	// The route names and the report's stage names together: the vocabulary a
-	// bounded aggregate and a cost account are both keyed by.
+	// The vocabulary a bounded aggregate and a cost account are keyed by: the
+	// program's routes, the report's stages, and the inspector's own routes.
+	//
+	// Its own too, because the inspector is observed like everything else and
+	// a route left out of the vocabulary has its traffic lumped in with
+	// everything undeclared -- which is how five hundred of its own spans came
+	// to sit in one bucket called "other". Its load is worth seeing; it is
+	// worth seeing as its own.
 	named := append(inspect.Names(declarations()), inspected.Stages...)
+	named = append(named, inspect.Names(inspecting())...)
+	// And the phases, because the surface is detailing them: three spans per
+	// request left undeclared are three spans per request in one bucket with
+	// no name on it, which is how the biggest thing in the aggregate came to
+	// be "other".
+	named = append(named, web.PhaseNames()...)
 	return inspect.Watched{
 		Running:   trace.Watch(),
 		Fibers:    trace.WatchFibers(),
 		Window:    window,
 		Collected: metrics.Collect(metrics.Naming(named...)),
 		Series:    series,
-		Costs:     process.Accounting(named...),
+		// Sizing rather than Accounting, because the size classes are what
+		// this demo has to show: reading them costs about twenty nanoseconds
+		// more than the scalars, and keeping them is a set of classes per
+		// name.
+		Costs: process.Sizing(named...),
 	}, nil
 }
 
@@ -134,6 +150,18 @@ func declarations() []web.Declaration {
 		inspected.Summarise.Declaration(),
 		inspected.FindNote.Declaration(),
 	}
+}
+
+// inspecting are the inspector's own routes, for the vocabulary. Its handlers
+// need a Watched and its declarations do not, so an empty one is enough to ask
+// what it serves.
+func inspecting() []web.Declaration {
+	routes, err := inspect.Routes[effect.Unit, inspected.Refusal](
+		inspect.Watched{}, inspect.DefaultAt)
+	if err != nil {
+		fail(err)
+	}
+	return web.DeclarationsOf(routes...)
 }
 
 // observing is the one observer a runtime takes: the live views inline,
