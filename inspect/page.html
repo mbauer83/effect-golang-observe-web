@@ -47,6 +47,7 @@
   h1 { margin: 0; font-size: 1rem; font-weight: 650; letter-spacing: 0.01em; }
   .meta { color: var(--quiet); font-size: 0.82rem; }
   .controls { margin-left: auto; display: flex; gap: 0.6rem; align-items: center; }
+  .controls label { display: flex; gap: 0.25rem; align-items: center; cursor: pointer; }
   button, select {
     font: inherit; font-size: 0.82rem;
     color: var(--ink); background: var(--ground);
@@ -70,7 +71,23 @@
     text-transform: uppercase; letter-spacing: 0.06em; color: var(--quiet);
   }
   .empty { color: var(--quiet); font-style: italic; }
-  .scroll { overflow-x: auto; }
+  /* Every panel whose content varies holds its size and scrolls inside it.
+     A panel that grew from four rows to nine moved everything below it in its
+     column, which put the thing being read somewhere else between one refresh
+     and the next -- so the panels are the fixed part and the content is what
+     moves. */
+  .scroll { overflow: auto; height: 17rem; }
+  .scroll.short { height: 9rem; }
+  /* The selected name's own box: what every run of it cost, which is the
+     question the span details deliberately do not answer. */
+  #account { height: 20rem; }
+  #account .name { margin-bottom: 0.3rem; }
+  #account dl { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 0.1rem 0.7rem; margin: 0 0 0.5rem; }
+  #account dt { color: var(--quiet); }
+  #account dd { margin: 0; font-variant-numeric: tabular-nums; }
+  tr.chosen td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  tr[aria-current="true"] td:first-child { font-weight: 650; }
+  #fibers, #open { height: 11rem; overflow-y: auto; }
   table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
   th, td { text-align: left; padding: 0.28rem 0.5rem 0.28rem 0; white-space: nowrap; }
   th { color: var(--quiet); font-weight: 550; border-bottom: 1px solid var(--edge); }
@@ -142,7 +159,7 @@
      here, with the axis and the details a chart library would have given. */
   /* Bounded, because a busy program produces more traces than a panel can
      show and the newest are the ones being looked for. */
-  .traces { display: grid; gap: 0.15rem; margin-bottom: 0.4rem; max-height: 22rem; overflow-y: auto; }
+  .traces { display: grid; gap: 0.15rem; margin-bottom: 0.4rem; height: 20rem; overflow-y: auto; align-content: start; }
   .trace {
     display: grid; grid-template-columns: minmax(10rem, auto) 1fr auto;
     gap: 0.6rem; align-items: center;
@@ -154,7 +171,7 @@
   .trace[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 /* The axis shares the rows' grid, so a tick sits above the position it
      labels. Full width, it labelled the panel and not the bars. */
-  .axis { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: 0.6rem; margin-bottom: 0.15rem; }
+  .axis { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: 0.6rem; margin-bottom: 0.15rem; min-height: 1.15rem; }
   .axis .scale { position: relative; height: 1.15rem; border-bottom: 1px solid var(--edge); }
   .axis .tick { position: absolute; bottom: 0; font-size: 0.68rem; color: var(--quiet); white-space: nowrap; }
   .axis .tick::after { content: ""; position: absolute; left: 0; bottom: -0.3rem; height: 0.3rem; border-left: 1px solid var(--edge); }
@@ -165,26 +182,50 @@
   .axis .tick.middle { transform: translateX(-50%); }
   .axis .tick.middle::after { left: 50%; }
   .row { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: 0.6rem; align-items: center; }
+  #waterfall { height: 8.5rem; overflow-y: auto; }
+  .row.reading .track { outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
   .row.chosen .track { outline: 1px solid var(--accent); outline-offset: 1px; }
   .row .track { cursor: pointer; }
+/* A span that encloses others is hatched where it was working itself and
+     solid where a child was, so the regions no child covers read as its own
+     time rather than as gaps in the drawing. A span with no children is all
+     its own time, so it stays plain: hatching everything said nothing. */
+  .bar.divided { background-image: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--panel) 60%, transparent) 3px 6px); }
+  .covered { position: absolute; top: 0; bottom: 0; background: currentColor; opacity: 0.001; }
+  .bar > .covered { background-image: none; background-color: color-mix(in srgb, var(--panel) 55%, transparent); opacity: 1; }
   .mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: 0.55; }
   .mark.status-typed_failure, .mark.status-defect { background: var(--bad); opacity: 0.9; }
-  .details { border-top: 1px dashed var(--edge); margin-top: 0.5rem; padding-top: 0.5rem; font-size: 0.8rem; }
-  .details dl { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.7rem; margin: 0.3rem 0 0; }
-  .details dt { color: var(--quiet); }
-  .details dd { margin: 0; }
+  .details { border-top: 1px dashed var(--edge); margin-top: 0.5rem; padding-top: 0.5rem; font-size: 0.8rem; height: 13rem; overflow-y: auto; }
+  /* A fixed term column, because an automatic one is as wide as the longest
+     term in the panel -- so a value arriving two seconds later rewrapped every
+     line beside it. Values that have no natural break, a path and an identity,
+     are cut rather than wrapped. */
+  .details dl { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 0.1rem 0.7rem; margin: 0.3rem 0 0; }
+  .details dt { color: var(--quiet); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .details dd.whole { overflow-wrap: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .details .events { margin: 0.4rem 0 0; padding: 0; list-style: none; color: var(--quiet); }
 
   /* Hot paths: the same arithmetic a flame graph does -- a span's duration
      less its children's -- ranked, because a ranked list reads in a panel
      and a flame graph needs a page. */
-  .hot { display: grid; gap: 0.25rem; }
+  .hot { display: grid; gap: 0.25rem; height: 20rem; overflow-y: auto; align-content: start; }
   .hot .row { grid-template-columns: minmax(12rem, 22rem) 1fr auto; }
   .hot .path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hot .path .leaf { font-weight: 650; }
   .hot .share { font-size: 0.78rem; color: var(--quiet); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .hot .bar { position: relative; }
-  .caveat { color: var(--quiet); font-size: 0.76rem; margin: 0.2rem 0 0.6rem; }
+  .caveat { color: var(--quiet); font-size: 0.76rem; margin: 0.2rem 0 0.6rem; min-height: 1.5em; }
+  /* A line that has something to say only sometimes still occupies its place
+     when it does not, so saying it moves nothing below it. */
+  #loose, #owned { min-height: 1.5em; margin: 0.3rem 0 0; }
+  /* Progressive disclosure: the bytes and the count in the row, the shapes
+     they were behind a click. */
+  tr.selectable td { cursor: pointer; }
+  tr.sizes td { padding-top: 0; padding-bottom: 0.4rem; }
+  .classes { display: grid; grid-template-columns: auto 1fr auto; gap: 0.05rem 0.5rem; font-size: 0.76rem; color: var(--quiet); }
+  .classes .edge { font-variant-numeric: tabular-nums; text-align: right; }
+  .classes .weight { height: 0.5rem; align-self: center; background: color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 2px; }
   a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
   a:hover { color: var(--ink); }
 </style>
@@ -197,6 +238,7 @@
   <span class="meta" id="dropped"></span>
   <span class="meta fault" id="fault"></span>
   <div class="controls">
+    <label class="meta"><input type="checkbox" id="own"> its own traffic</label>
     <select id="every" aria-label="Refresh interval">
       <option value="1000">every 1s</option>
       <option value="2000" selected>every 2s</option>
@@ -214,9 +256,15 @@
     <div class="charts" id="charts"></div>
   </section>
   <section>
-    <h2>Cost by route</h2>
+    <h2>Cost by name</h2>
     <p class="caveat" id="costcaveat"></p>
-    <div class="scroll"><table id="costs"></table></div>
+    <div class="scroll short"><table id="costs"></table></div>
+    <div class="details" id="account">
+      <div class="name" id="accountname"></div>
+      <dl id="accountfacts"></dl>
+      <div id="accountbands"></div>
+      <div id="accountchart"></div>
+    </div>
   </section>
   <section>
     <h2>Fibers</h2>
@@ -229,6 +277,7 @@
   </section>
   <section>
     <h2>Traces</h2>
+    <p class="caveat" id="hidden"></p>
     <div class="traces" id="traces"></div>
     <p class="meta" id="loose"></p>
   </section>
@@ -239,6 +288,7 @@
   </section>
   <section>
     <h2>Timeline</h2>
+    <p class="caveat" id="gone"></p>
     <div class="axis" id="axis"></div>
     <div id="waterfall"></div>
     <div class="details" id="details"></div>
@@ -285,6 +335,25 @@ function micros(value) {
 
 function statusClass(span) {
   return span.open ? "status-open" : "status-" + (span.status || "unclassified");
+}
+
+// The inspector's own requests are observed like everything else -- a tool's
+// load is part of what a program is doing, and hiding it would be the one
+// measurement nobody could check. But it refreshes every couple of seconds, so
+// left in the trace panels it drowns the traffic somebody opened this to look
+// at: hundreds of its own traces against a handful of the application's.
+//
+// So the traces are filtered here and the statistics are not. The count of
+// what was hidden is shown, because a filter nobody can see is a lie.
+function ownTrace(trace) {
+  const held = trace.root.attributes || [];
+  for (const attribute of held) {
+    if (attribute.key === "route") {
+      return attribute.value === mounted || attribute.value.startsWith(mounted + "/");
+    }
+  }
+  // No route annotation: not one of ours, so it stays.
+  return false;
 }
 
 // Hot paths: every span in the window aggregated by the chain of names that
@@ -383,26 +452,98 @@ function windowOf(trace) {
   return { from: from, to: Math.max(to, from + 1) };
 }
 
-let chosen = { trace: null, span: null };
+// The chosen trace is remembered by its root span's identity and not by its
+// position: traces arrive newest first, so an index points at a different
+// trace two seconds later and the panel shifted under whoever was reading it.
+//
+// Its spans are remembered too. The window holds a few hundred events, so a
+// trace somebody is reading falls out of it within a minute or two -- and a
+// timeline that emptied itself at that moment would be a timeline nobody could
+// finish looking at. It is kept until another is chosen, and says it is no
+// longer in the window.
+let chosen = { root: null, span: null, pinned: false, kept: null, measured: {} };
+
+// A reload is not a change of mind, so the choice outlives the page. Two keys
+// rather than one: which trace and span were chosen, and the trace itself.
+//
+// Separate, because they are written at different times and for different
+// reasons. The choice is two numbers and is rewritten whenever it changes; the
+// copy is the whole trace and is written when the trace is chosen and while it
+// is still in the window, so what survives the trace falling out is the trace
+// as it finished. The copy is replaced when another trace is chosen and
+// removed when the choice is, and at no other time -- a trace nobody has
+// deselected is a trace somebody is still reading.
+//
+// Every access is guarded: a browser with storage denied still runs the
+// inspector, it just forgets between loads.
+const remembered = "effect-golang-inspect-chosen";
+const keptTrace = "effect-golang-inspect-kept-trace";
+
+function remember() {
+  try {
+    if (chosen.root === null) {
+      localStorage.removeItem(remembered);
+      localStorage.removeItem(keptTrace);
+      return;
+    }
+    localStorage.setItem(remembered, JSON.stringify({
+      root: chosen.root, span: chosen.span,
+      pinned: !!chosen.pinned, measured: chosen.measured || {},
+    }));
+    if (chosen.kept) localStorage.setItem(keptTrace, JSON.stringify(chosen.kept));
+  } catch (whatever) { /* storage denied; the choice lives for this page */ }
+}
+
+function recall() {
+  try {
+    const held = JSON.parse(localStorage.getItem(remembered) || "null");
+    if (!held || held.root === null || held.root === undefined) return;
+    chosen = {
+      root: held.root,
+      span: held.span === undefined ? null : held.span,
+      pinned: !!held.pinned,
+      measured: held.measured || {},
+      kept: JSON.parse(localStorage.getItem(keptTrace) || "null"),
+    };
+  } catch (whatever) { /* unreadable or absent; the default stands */ }
+}
+
+recall();
 
 // A trace worth arriving on: the newest one that has something to decompose,
-// or the newest at all. Defaulting to the first trace showed a timeline of one
-// bar, which is the panel's least useful state.
+// or the newest at all. Defaulting to the first showed a timeline of one bar,
+// which is the panel's least useful state.
 function defaultTrace(traces) {
   const decomposable = traces.findIndex((trace) => trace.spans.length > 1);
   return decomposable >= 0 ? decomposable : 0;
 }
 
-// chosenIn is the trace the panels are showing: the caller's choice while it
-// still exists, and the default until they make one.
+// chosenIn is the trace the panels are showing: the one whose identity was
+// chosen if it is still in the window, otherwise the copy kept of it, and
+// otherwise the default.
 function chosenIn(traces) {
-  if (chosen.trace === null || chosen.trace >= traces.length) {
-    return defaultTrace(traces);
+  if (chosen.root !== null) {
+    const at = traces.findIndex((trace) => trace.root.id === chosen.root);
+    if (at >= 0) {
+      // Refreshed while it is still in the window, so what is held once it
+      // falls out is the trace as it finished rather than as it began -- and
+      // with what its spans measured, which leaves the window before the
+      // trace does.
+      const grew = !chosen.kept || chosen.kept.spans.length !== traces[at].spans.length;
+      chosen.kept = traces[at];
+      const found = keepMeasured(traces[at]);
+      if (grew || found) remember();
+      return { trace: traces[at], at: at, held: true };
+    }
   }
-  return chosen.trace;
+  if (chosen.kept) {
+    return { trace: chosen.kept, at: -1, held: false };
+  }
+  const at = defaultTrace(traces);
+  return { trace: traces[at], at: at, held: true };
 }
 
-function renderTraces(into, traces) {
+function renderTraces(into, traces, showing) {
   into.replaceChildren();
   if (traces.length === 0) {
     into.appendChild(tagged("p", "empty", "none in the window"));
@@ -415,7 +556,7 @@ function renderTraces(into, traces) {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "trace";
-    row.setAttribute("aria-current", String(index === chosenIn(traces)));
+    row.setAttribute("aria-current", String(index === showing.at));
     row.appendChild(tagged("span", "name", trace.root.name || "(unnamed)"));
     const took = trace.root.open
       ? tagged("span", statusClass(trace.root), "open " + micros(trace.root.ageMicros))
@@ -425,7 +566,13 @@ function renderTraces(into, traces) {
     row.appendChild(tagged("span", "took",
       trace.spans.length + " span" + (trace.spans.length === 1 ? "" : "s")));
     row.addEventListener("click", () => {
-      chosen = { trace: index, span: null };
+      // A different trace is a different set of measurements.
+      chosen = {
+        root: trace.root.id, span: null, pinned: false,
+        kept: trace, measured: {},
+      };
+      remember();
+      el("waterfall").dataset.drew = "";
       redraw();
     });
     into.appendChild(row);
@@ -449,21 +596,71 @@ function renderAxis(into, held) {
   into.appendChild(scale);
 }
 
-function renderWaterfall(into, details, traces) {
-  el("axis").replaceChildren();
-  into.replaceChildren();
-  details.replaceChildren();
-  if (traces.length === 0) {
+// childrenOf are the spans directly under the one at index, read off the flat
+// list: the next entries one level deeper, until something at that level or
+// above ends the run.
+function childrenOf(spans, index) {
+  const depth = spans[index].depth;
+  const held = [];
+  for (let at = index + 1; at < spans.length; at++) {
+    if (spans[at].depth <= depth) break;
+    if (spans[at].depth === depth + 1) held.push(spans[at]);
+  }
+  return held;
+}
+
+function renderWaterfall(into, details, showing, accounted) {
+  const trace = showing.trace;
+  if (!trace) {
+    el("axis").replaceChildren();
+    into.replaceChildren();
+    details.replaceChildren();
     into.appendChild(tagged("p", "empty", "nothing to draw"));
     return;
   }
-  const trace = traces[chosenIn(traces)];
+  el("gone").textContent = showing.held ? "" : "no longer in the window";
   const held = windowOf(trace);
   const width = held.to - held.from;
+
+  // A finished trace is finished: its bars will never move again, so redrawing
+  // them every two seconds only takes the row out from under whoever is
+  // pointing at it. Drawn once, and again when something about it has actually
+  // changed -- a span was added, it fell out of the window, or it is still
+  // open and therefore still growing.
+  const growing = trace.spans.some((span) => span.open);
+  const drew = [trace.root.id, trace.spans.length, showing.held,
+    growing ? Date.now() : "finished"].join(":");
+  if (into.dataset.drew !== drew) {
+    into.dataset.drew = drew;
+    drawSpans(into, details, trace, held, width);
+  }
+
+  // The details are read from the newest snapshot even when the rows were not
+  // redrawn: what a span cost is still accumulating while the bars stand
+  // still.
+  const kept = trace.spans.find((span) => span.id === chosen.span) || trace.spans[0];
+  showDetails(details, kept, held, accounted);
+}
+
+// mark says which row the details belong to, and whether it is pinned there.
+function mark(into, id) {
+  for (const row of into.querySelectorAll(".row")) {
+    const mine = Number(row.dataset.span) === id;
+    row.classList.toggle("reading", mine);
+    row.classList.toggle("chosen", mine && !!chosen.pinned);
+  }
+}
+
+function drawSpans(into, details, trace, held, width) {
+  el("axis").replaceChildren();
+  into.replaceChildren();
   renderAxis(el("axis"), held);
 
   trace.spans.forEach((span, index) => {
-    const row = tagged("div", "row" + (chosen.span === index ? " chosen" : ""));
+    const mine = chosen.span === span.id;
+    const row = tagged("div", "row" +
+      (mine ? " reading" : "") + (mine && chosen.pinned ? " chosen" : ""));
+    row.dataset.span = String(span.id);
     const label = tagged("div", "label");
     label.style.paddingLeft = (span.depth * 0.8) + "rem";
     label.appendChild(tagged("span", "name", span.name || "(unnamed)"));
@@ -474,6 +671,18 @@ function renderWaterfall(into, details, traces) {
     const bar = tagged("div", "bar " + statusClass(span));
     bar.style.left = (100 * (span.startMicros - held.from) / width) + "%";
     bar.style.width = Math.max(0.8, 100 * took / width) + "%";
+    // Where its children ran, marked on its own bar: what is left is the
+    // span's own time, which is otherwise indistinguishable from a gap in
+    // the drawing.
+    const children = childrenOf(trace.spans, index);
+    if (children.length > 0) bar.classList.add("divided");
+    for (const child of children) {
+      const over = tagged("div", "covered");
+      over.style.left = (100 * (child.startMicros - span.startMicros) / took) + "%";
+      over.style.width = Math.max(0.5,
+        100 * (child.open ? child.ageMicros : child.micros) / took) + "%";
+      bar.appendChild(over);
+    }
     track.appendChild(bar);
 
     // Events as marks on the bar's own timeline, which is what an event's
@@ -485,46 +694,149 @@ function renderWaterfall(into, details, traces) {
       track.appendChild(mark);
     }
 
-    // Hover reads it, click keeps it: a details panel that vanished when the
-    // pointer left would be one nobody could read the bottom of.
-    const show = () => showDetails(details, span, held);
-    row.addEventListener("mouseenter", show);
+    // Hover reads a row, click pins it, and a pinned row stays pinned --
+    // including while the pointer travels down across the other rows to reach
+    // the details it is pinned for, which is the whole reason pinning exists.
+    // Clicking it again releases it.
+    //
+    // The span is remembered by its identity and not by its position, so a
+    // span added to an open trace does not move the choice to its neighbour.
+    const show = (pinning) => {
+      if (chosen.pinned && !pinning) return;
+      chosen.span = span.id;
+      if (pinning) {
+        // Pinning a row is choosing the trace it is in, even where the trace
+        // was the default rather than a click: the pin is what has to survive
+        // the trace falling out of the window, and so is what it measured.
+        chosen.root = trace.root.id;
+        chosen.kept = trace;
+        chosen.pinned = true;
+      }
+      remember();
+      mark(into, span.id);
+      showDetails(details, span, held, (latest && latest.costs) || []);
+    };
+    row.addEventListener("mouseenter", () => show(false));
     row.addEventListener("click", () => {
-      chosen = { trace: chosenIn(traces), span: index };
-      redraw();
+      if (chosen.pinned && chosen.span === span.id) {
+        chosen.pinned = false;
+        remember();
+        mark(into, span.id);
+        return;
+      }
+      show(true);
     });
     row.appendChild(track);
     into.appendChild(row);
   });
+}
 
-  const kept = trace.spans[chosen.span] || trace.spans[0];
-  showDetails(details, kept, held);
+// runWithin is the run this span is: the one whose measured window ended
+// inside the span's own, which is what attributes a process-wide reading to
+// one occurrence of a name.
+//
+// Go reports no per-goroutine allocation, so the figure is still what the
+// *process* did while this span ran -- but during this span rather than during
+// every span that ever shared its name, which is the difference between a
+// number that stands still and an average that never does.
+//
+// The finalizer that takes the second reading runs inside the span, so the
+// window's end precedes the span's by a hair. A microsecond of slack either
+// way covers the rounding; an open span is matched against its age.
+function runWithin(runs, span) {
+  if (!runs || runs.length === 0) return null;
+  const from = span.startMicros - 1;
+  const to = span.startMicros + (span.open ? span.ageMicros : span.micros) + 1;
+  for (const run of runs) {
+    if (run.endedMicros < 0) continue;
+    if (run.endedMicros >= from && run.endedMicros <= to) return run;
+  }
+  return null;
+}
+
+// keepMeasured records what each span of the chosen trace measured, while the
+// runs that say so are still in the reading.
+//
+// A run is attributed by its window, and a window is placed against the
+// earliest span in the reading -- so a run leaves the reading as soon as the
+// trace it belonged to does, and sooner if the account's ring turns over
+// first. A trace somebody is still looking at should not lose its numbers when
+// that happens, so they are copied out while they are there.
+//
+// Returns whether anything new was found, which is what decides a write to
+// storage.
+function keepMeasured(trace) {
+  let found = false;
+  if (!chosen.measured) chosen.measured = {};
+  for (const span of trace.spans) {
+    if (chosen.measured[span.id]) continue;
+    const account = ((latest && latest.costs) || [])
+      .find((cost) => cost.name === span.name);
+    const run = account ? runWithin(account.runs, span) : null;
+    if (run) {
+      chosen.measured[span.id] = run;
+      found = true;
+    }
+  }
+  return found;
+}
+
+// heldRun is what this span measured, from the copy kept above.
+function heldRun(span) {
+  if (!chosen.measured) return null;
+  return chosen.measured[span.id] || null;
 }
 
 // showDetails is what a chart library's tooltip would have been, except that
 // it holds still: name, where it was described, when it ran within the trace,
 // what it ended as, what it was annotated with, and what happened inside it.
-function showDetails(into, span, held) {
+function showDetails(into, span, held, accounted) {
   into.replaceChildren();
   into.appendChild(tagged("div", "name", span.name || "(unnamed)"));
   const list = document.createElement("dl");
-  const say = (term, value) => {
+  const say = (term, value, whole) => {
     list.appendChild(tagged("dt", null, term));
-    list.appendChild(tagged("dd", null, value));
+    list.appendChild(tagged("dd", whole ? "whole" : null, value));
   };
   say("status", span.open ? "open" : (span.status || "unclassified"));
   say(span.open ? "open for" : "took",
     micros(span.open ? span.ageMicros : span.micros));
   if (!span.open && span.selfMicros !== span.micros) {
-    say("of its own", micros(span.selfMicros));
+    say("of its own", micros(span.selfMicros) + "  " +
+      percent(span.micros ? span.selfMicros / span.micros : 0));
   }
   say("began", "+" + at(span.startMicros - held.from));
   say("span", "#" + span.id + (span.parentId ? " under #" + span.parentId : " (root)"));
-  if (span.source) say("described", span.source);
+  if (span.trace) say("trace", span.trace, true);
+  if (span.source) say("described", span.source, true);
   for (const attribute of span.attributes || []) {
     say(attribute.key, attribute.value);
   }
   into.appendChild(list);
+
+  // What this span did, and nothing about the name it shares with others.
+  //
+  // The account keyed by name is an average over every run of it, and it moves
+  // while the program runs -- so beside a trace that ended a minute ago it read
+  // as this span still allocating. Averages are a question about a route, a
+  // stage or a phase, and Cost by route is where that question is asked.
+  const account = (accounted || []).find((cost) => cost.name === span.name);
+  const own = account ? runWithin(account.runs, span) : null;
+  const measured = own || heldRun(span);
+  if (measured) {
+    // Zero is a reading and not a blank: Go flushes a P's allocation
+    // accounting in batches, so a span of a few microseconds often ends before
+    // anything it allocated has been counted.
+    say("allocated during", (measured.bytes ? bytes(measured.bytes) : "0 B") +
+      " in " + measured.objects + " allocation(s)");
+    say("measured over", micros(measured.micros));
+  } else if (!account) {
+    // Only a name something measured has an account at all: a route through
+    // Observing, a stage through Measured, a phase through Sampling.
+    say("allocation", "not measured");
+  } else {
+    say("allocation", "not held for this run");
+  }
 
   const events = span.events || [];
   if (events.length === 0) return;
@@ -756,7 +1068,7 @@ function shade(token) {
   return "color-mix(in srgb, " + colour(token) + " 20%, transparent)";
 }
 
-function renderTable(into, columns, rows, cell) {
+function renderTable(into, columns, rows, cell, decorate) {
   into.replaceChildren();
   if (!rows || rows.length === 0) {
     into.appendChild(tagged("caption", "empty", "nothing"));
@@ -773,6 +1085,7 @@ function renderTable(into, columns, rows, cell) {
       line.appendChild(tagged("td", column.numeric ? "n" : "", cell(row, column.name)));
     }
     into.appendChild(line);
+    if (decorate) decorate(line, row);
   }
 }
 
@@ -788,27 +1101,204 @@ const routeColumns = [
 ];
 
 const costColumns = [
-  { name: "route" }, { name: "runs", numeric: true },
-  { name: "per run", numeric: true }, { name: "allocated", numeric: true },
+  { name: "name" }, { name: "kind" }, { name: "runs", numeric: true },
+  { name: "per run, recent", numeric: true }, { name: "per run, all", numeric: true },
+  { name: "allocs/run", numeric: true }, { name: "mean size", numeric: true },
   { name: "cpu", numeric: true }, { name: "longest", numeric: true },
-  { name: "collections", numeric: true },
 ];
 
+// previous is the reading before the current one, kept so a marginal figure
+// can be worked out from two cumulative ones.
+//
+// The account is cumulative, so its per-run is a lifetime average and lags
+// what a route costs now: measured here, a route settled at 1.16MiB per run
+// while the average was still climbing through 920KiB. The difference between
+// two readings is the answer to "what does it cost now", and only a reader
+// holding both can take it.
+let previous = null;
+
+function marginal(row) {
+  if (!previous) return null;
+  for (const before of previous.costs || []) {
+    if (before.name !== row.name) continue;
+    const runs = row.times - before.times;
+    if (runs <= 0) return null;
+    return (row.allocatedDuring - before.allocatedDuring) / runs;
+  }
+  return null;
+}
+
+// The selected name: whose aggregate the box under the table is about.
+//
+// Kept for the same reason the chosen trace is: a table that reordered itself
+// under a selection -- and it does, the rows are sorted by what allocated most
+// -- would move the answer away from whoever asked for it.
+let selected = null;
+const selectedName = "effect-golang-inspect-selected";
+
+function select(name) {
+  selected = name;
+  try {
+    localStorage.setItem(selectedName, name);
+  } catch (whatever) { /* storage denied; the selection lives for this page */ }
+  drawn.delete("account");
+  el("accountchart").replaceChildren();
+  redraw();
+}
+
+try {
+  selected = localStorage.getItem(selectedName) || null;
+} catch (whatever) { /* unreadable; the busiest name is selected instead */ }
+
+// kindOf says what a name is, from what the reading itself contains: a name
+// the surface declares is a route, one the transports name is a phase, and
+// the rest is work a program named for itself.
+//
+// Derived rather than carried, because the account is keyed by name and by
+// nothing else -- which is what lets a route, a phase and a stage be compared
+// in one table.
+function kindOf(name) {
+  if (name === "other") return "undeclared";
+  if (["decoding", "handling", "encoding"].includes(name)) return "phase";
+  const routes = (latest && latest.routes) || [];
+  if (routes.some((route) => route.method + " " + route.path === name)) return "route";
+  // The inspector's own routes are not in the surface it is watching, and
+  // saying "named work" of them hid the one thing worth knowing about them.
+  if (mounted && name.includes(" " + mounted)) return "inspector";
+  return "named work";
+}
+
+// renderAccount is the aggregate the span details leave out: what every run of
+// one name cost, and how the runs are spread.
+function renderAccount(costs) {
+  const rows = costs || [];
+  const account = rows.find((cost) => cost.name === selected) || rows[0] || null;
+  el("accountname").textContent = account
+    ? account.name + "  \u00b7  " + kindOf(account.name)
+    : "";
+  const facts = el("accountfacts");
+  facts.replaceChildren();
+  el("accountbands").replaceChildren();
+  if (!account) {
+    facts.appendChild(tagged("dd", "empty", "nothing accounted yet"));
+    return;
+  }
+  const say = (term, value) => {
+    facts.appendChild(tagged("dt", null, term));
+    facts.appendChild(tagged("dd", null, value));
+  };
+  say("runs accounted", String(account.times));
+  say("per run", bytes(account.perRunBytes) + " in " +
+    (account.objectsPerRun || 0) + " allocation(s)");
+  const recent = marginal(account);
+  if (recent !== null) say("per run, since the last reading", bytes(recent));
+  if (account.meanObjectBytes) say("mean allocation", bytes(account.meanObjectBytes));
+  say("longest run", micros(account.longestMicros));
+  if (account.cpuSecondsDuring) {
+    say("cpu during", (1000 * account.cpuSecondsDuring).toFixed(1) + "ms");
+  }
+  if (account.collections) say("collections during", String(account.collections));
+  renderSizes(el("accountbands"), account);
+  renderRuns(el("accountchart"), account);
+}
+
+// renderRuns draws the runs still in the window, newest at the right: an
+// average says what a name costs and this says whether it costs that every
+// time.
+//
+// Go flushes a P's allocation accounting in batches, so short runs read as
+// zero and the run after them carries what they allocated. That is why the
+// spread is worth drawing rather than summarising: a column of zeros with
+// spikes in it is a measurement artefact, and a rising line is not.
+function renderRuns(into, account) {
+  if (typeof uPlot === "undefined") return;
+  const runs = (account.runs || []).slice().reverse();
+  if (runs.length < 2) {
+    into.replaceChildren(tagged("p", "empty", "one run or none in the window"));
+    return;
+  }
+  const at = runs.map((run, index) => index - (runs.length - 1));
+  chartOf(into, "account", "allocated per run  (" + account.name + ")",
+    [
+      { label: "runs ago",
+        value: (self, value) => value == null ? "--"
+          : (value >= -0.5 ? "latest" : Math.abs(Math.round(value)) + " back") },
+      { label: "allocated", stroke: colour("--accent"), width: 1.5,
+        fill: shade("--accent"),
+        value: (self, value) => value == null ? "--" : bytes(value) },
+    ],
+    [at, runs.map((run) => run.bytes)],
+    { height: 120, format: (value) => bytes(value), axisWidth: 62 });
+}
+
 function renderCosts(into, caveat, costs) {
-  // One clause, not a paragraph: process-wide means concurrent work is in
-  // these numbers, and the handler's window excludes the codecs around it.
-  caveat.textContent = costs && costs.length ? "process-wide, handler only" : "";
+  // One clause. What it means for reading the numbers: the figure is
+  // everything the process allocated while that name's work ran, so two
+  // overlapping requests are each charged for both -- a bound on what a name
+  // costs and not its share.
+  caveat.textContent = costs && costs.length
+    ? "allocated by the whole process while each name's work ran"
+    : "";
+  renderCostRows(into, costs);
+}
+
+// The size classes, disclosed under the row they belong to.
+//
+// A row carries the bytes and the count, which is what a reader wants first.
+// What shapes those allocations were is the second question, and sixty-eight
+// buckets in every row would bury the first.
+// renderSizes discloses what shapes a name's allocations were, per run.
+//
+// Per run because the row above it is: the account sums the bands over every
+// run, and eighty thousand small allocations beside a per-run figure of three
+// kilobytes read as one allocation in eighty thousand pieces.
+function renderSizes(into, row) {
+  const classes = row.sizes || [];
+  if (classes.length === 0) return;
+  const runs = Math.max(1, row.times || 1);
+  const most = Math.max(...classes.map((one) => one.count), 1);
+  const held = tagged("div", "classes");
+  for (const one of classes) {
+    const each = one.count / runs;
+    held.appendChild(tagged("div", "edge",
+      one.atMostBytes ? "\u2264 " + bytes(one.atMostBytes) : "larger"));
+    const weight = tagged("div", "weight");
+    weight.style.width = Math.max(1, 100 * one.count / most) + "%";
+    weight.title = one.count + " allocation(s) over " + runs + " run(s)";
+    held.appendChild(weight);
+    held.appendChild(tagged("div", "edge",
+      each < 1 ? "<1" : String(Math.round(each))));
+  }
+  held.appendChild(tagged("div", "edge", ""));
+  held.appendChild(tagged("div", "legend", "allocations per run, by size"));
+  into.appendChild(held);
+}
+
+function renderCostRows(into, costs) {
   renderTable(into, costColumns, costs, (row, column) => {
     switch (column) {
-      case "route": return row.name;
+      case "name": return row.name;
+      case "kind": return kindOf(row.name);
       case "runs": return row.times;
-      case "per run": return bytes(row.perRunBytes);
-      case "allocated": return bytes(row.allocatedDuring);
+      case "per run, recent": {
+        const recent = marginal(row);
+        return recent === null ? "-" : bytes(recent);
+      }
+      case "per run, all": return bytes(row.perRunBytes);
+      case "allocs/run": return row.objectsPerRun || "-";
+      case "mean size": return bytes(row.meanObjectBytes);
       case "cpu": return row.cpuSecondsDuring
         ? (1000 * row.cpuSecondsDuring).toFixed(1) + "ms" : "-";
       case "longest": return micros(row.longestMicros);
-      case "collections": return row.collections || "-";
     }
+  }, (line, row) => {
+    // A row selects: what it discloses is in the box under the table, where
+    // it holds still and has room for the spread as well as the numbers.
+    line.classList.add("selectable");
+    const shown = row.name === selected;
+    line.classList.toggle("chosen", shown);
+    line.setAttribute("aria-current", String(shown));
+    line.addEventListener("click", () => select(row.name));
   });
 }
 
@@ -817,20 +1307,28 @@ function render(snapshot) {
   el("dropped").textContent = snapshot.dropped
     ? snapshot.dropped + " dropped"
     : "";
+  previous = latest === snapshot ? previous : latest;
   latest = snapshot;
   renderGauges(el("gauges"), snapshot.process);
   renderCharts(el("charts"), snapshot.process);
   renderCosts(el("costs"), el("costcaveat"), snapshot.costs);
+  renderAccount(snapshot.costs);
   renderFibers(el("fibers"), snapshot.fibers);
   el("owned").textContent = snapshot.owned && snapshot.owned.counted
     ? snapshot.owned.fibers + " fiber(s), " + snapshot.owned.resources +
       " resource(s) owned"
     : "not counting (needs debug tracking)";
   renderOpen(el("open"), snapshot.openSpans);
-  const traces = tracesOf(snapshot.trace);
-  renderTraces(el("traces"), traces);
+  const all = tracesOf(snapshot.trace);
+  const traces = el("own").checked ? all : all.filter((trace) => !ownTrace(trace));
+  const hidden = all.length - traces.length;
+  el("hidden").textContent = hidden
+    ? hidden + " of the inspector's own hidden \u2014 its load is still in the statistics"
+    : "";
+  const showing = chosenIn(traces);
+  renderTraces(el("traces"), traces, showing);
   renderHot(el("hot"), traces);
-  renderWaterfall(el("waterfall"), el("details"), traces);
+  renderWaterfall(el("waterfall"), el("details"), showing, snapshot.costs);
   el("loose").textContent = snapshot.looseEvents
     ? snapshot.looseEvents + " event(s) outside every span"
     : "";
@@ -959,6 +1457,13 @@ function loaded() {
 
 el("now").addEventListener("click", read);
 el("every").addEventListener("change", pace);
+// Choosing what to look at redraws from the reading in hand rather than
+// waiting for the next one.
+el("own").addEventListener("change", () => {
+  chosen = { root: null, span: null, pinned: false, kept: null, measured: {} };
+  remember();
+  redraw();
+});
 // Reading while the tab is hidden is work nobody is looking at.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {

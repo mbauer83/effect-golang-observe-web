@@ -22,7 +22,9 @@ inspect.Licence() []byte
 
 ```go
 surface, err := web.NewRoutes(routes...)          // written as any program writes them
-surface = surface.Wrapping(inspect.Observing[R, E](costs))
+surface = surface.
+    Measuring(inspect.Sampling(costs)).           // optional: the phases too
+    Wrapping(inspect.Observing[R, E](costs))
 ```
 
 That is all of it. **Nothing about how the routes are declared or handled
@@ -151,11 +153,24 @@ client of a contract rather than of a guess: a script polling the snapshot,
 another tool aggregating several programs, or a test asserting on what a page
 will render.
 
-## Measuring a stage
+## Measuring a stage, and a phase
 
 `Observing` accounts each route under its own name when it is given a
 `*process.Costs`, and a `nil` turns that half off: the cost is real, two reads
 of `runtime/metrics` per request.
+
+`Sampling` does the same for the route's own phases — decoding, handling,
+encoding. The transports name those and cannot measure them: they read no
+counters and depend on nothing that does, so `web.Routes.Measuring` hands each
+phase to a sampler and this is the sampler. Without it the phases appear on the
+timeline with no figures, which is what they did until it existed.
+
+```go
+surface = surface.Measuring(inspect.Sampling(costs)).Wrapping(observing)
+```
+
+Declare `web.PhaseNames()` in the vocabulary and the account alike, or three
+spans per request land in the undeclared bucket.
 
 **Go's CPU accounting does not move over a fast window**, so a route answering
 in twenty microseconds reports zero CPU. The allocation counters are exact and
@@ -170,12 +185,60 @@ held := direct.Bind(bind, process.Measured(costs, "read", store.All()))
 digest := direct.Bind(bind, process.Measured(costs, "digest", digesting(held)))
 ```
 
+## What a span says it cost, and what a name says
+
+The two are different questions and the page keeps them apart, because
+answering the first with the second is misleading in a way that looks like a
+bug: an average moves while the program runs, so a trace that ended a minute
+ago kept changing its allocation figures under whoever was reading it.
+
+**A span's details are that span's run.** Each account keeps its recent windows
+as well as their sum, and a span is matched to the run whose window closed
+inside it. That figure never changes again. It is still process-wide — Go
+reports no per-goroutine allocation — but it is *during this span* rather than
+during every span that ever shared its name.
+
+A run of a few microseconds often reports zero: Go flushes a processor's
+allocation accounting in batches, so nothing it allocated had been counted when
+its window closed. Read as "below the counter's resolution", not as "allocated
+nothing".
+
+**A name's aggregate is in Cost by name.** Selecting a row there gives the
+average, the spread of the allocation sizes per run, and the runs still in the
+window drawn as a series — which is where "does it cost that every time" is
+answered. Routes, phases, stages and undeclared work sit in one table because
+the account is keyed by name and by nothing else, and the kind is derived from
+the reading: a name the surface declares is a route, a name the transports own
+is a phase, the rest is work a program named for itself.
+
+## Selections hold still
+
+A tool refreshing every two seconds must not move what somebody is reading, and
+three things had to be made to hold.
+
+**The chosen trace** is kept by its root's `Identity`, not its position: traces
+arrive newest first, so an index points at a different trace two seconds later.
+It is kept in browser storage together with a copy of the trace and what its
+spans measured, so it survives both a reload and the trace falling out of the
+window — until another trace is chosen. A trace no longer in the window says so.
+
+**A pinned span** stays pinned while the pointer travels across the other rows
+to reach its details. Hover reads a row; click pins it; clicking it again lets
+go.
+
+**Panels hold their size** and scroll inside it. A panel that grew from four
+rows to nine moved everything below it in its column, which put the thing being
+read somewhere else between one refresh and the next.
+
+A finished trace's bars are drawn once and not redrawn: they will never move
+again, and redrawing them only takes the row out from under the pointer.
+
 ## The page
 
-Panels: the process as gauges and charts; cost by route and stage; the fibers
-and open spans with their ages; the traces; one trace on a timeline with a
-details panel; the hot paths; the measurements; and the surface, whose openable
-paths are links to the app.
+Panels: the process as gauges and charts; cost by name with the selected name's
+own box; the fibers and open spans with their ages; the traces; one trace on a
+timeline with a details panel; the hot paths; the measurements; and the surface,
+whose openable paths are links to the app.
 
 **Traces are per trace, not per window.** Scaling every bar to the whole
 reading made each one a hairline — a reading spans the minutes between requests
