@@ -19,11 +19,11 @@ type Note struct {
 
 // NoteSchema describes a note, and is what serves both directions.
 var NoteSchema = schema.Struct[Note]("Note",
-	schema.FieldOf("title", schema.MaxLength(schema.MinLength(schema.Text(), 1), 80),
+	schema.FieldOf("title", schema.Text().Constrained(schema.MinLength(1), schema.MaxLength(80)),
 		func(value Note) string { return value.Title },
 		func(value *Note, field string) { value.Title = field }).
 		Documented("Title identifies the note."),
-	schema.FieldOf("body", schema.MaxLength(schema.Text(), 400),
+	schema.FieldOf("body", schema.Text().Constrained(schema.MaxLength(400)),
 		func(value Note) string { return value.Body },
 		func(value *Note, field string) { value.Body = field }),
 ).Documented("Note is one note.")
@@ -33,7 +33,7 @@ var NotesSchema = schema.List(NoteSchema)
 
 // NoteTitle is the title as a path parameter reads it, which is the same rule
 // the entity's own field carries.
-var NoteTitle = schema.MaxLength(schema.MinLength(schema.Text(), 1), 80)
+var NoteTitle = schema.Text().Constrained(schema.MinLength(1), schema.MaxLength(80))
 
 // Refusal is the program's own failure, which the inspector never becomes.
 type Refusal struct {

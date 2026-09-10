@@ -24,7 +24,7 @@ const DefaultAt = "/inspect"
 //
 // Three endpoints. The page is what a person opens; the snapshot is what the
 // page reads and what a script reads; the contract is what says so.
-func Surface[R, E any](watched Watched, at string) (web.Routes[R, E], error) {
+func Surface[R, E any](watched *Watched, at string) (web.Routes[R, E], error) {
 	mounted, err := Routes[R, E](watched, at)
 	if err != nil {
 		return web.Routes[R, E]{}, err
@@ -41,7 +41,7 @@ func Surface[R, E any](watched Watched, at string) (web.Routes[R, E], error) {
 // like any other.
 //
 //	surface, err := web.NewRoutes(append(mine, inspecting...)...)
-func Routes[R, E any](watched Watched, at string) ([]web.Route[R, E], error) {
+func Routes[R, E any](watched *Watched, at string) ([]web.Route[R, E], error) {
 	mounted := mountedAt(at)
 	own := []web.Route[R, E]{
 		page[R, E](mounted),
@@ -99,7 +99,7 @@ func page[R, E any](at string) web.Route[R, E] {
 }
 
 // snapshot serves one reading, described.
-func snapshot[R, E any](watched Watched, at string) web.Route[R, E] {
+func snapshot[R, E any](watched *Watched, at string) web.Route[R, E] {
 	return web.Handle(
 		web.GET(at+"/snapshot", web.Nothing(),
 			web.Returns(http.StatusOK, SnapshotSchema)).

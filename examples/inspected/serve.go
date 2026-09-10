@@ -49,7 +49,7 @@ var (
 // this -- web.Handle, nothing else -- and the observation is one line further
 // down. That is the point: a program does not get written differently because
 // somebody wants to watch it.
-func Surface(store *Store, watched inspect.Watched) (web.Routes[effect.Unit, Refusal], error) {
+func Surface(store *Store, watched *inspect.Watched) (web.Routes[effect.Unit, Refusal], error) {
 	mine := []web.Route[effect.Unit, Refusal]{
 		web.Handle(ListNotes, func(effect.Unit) storing[[]Note] { return store.All() }),
 		web.Handle(AddNote, store.Add),
@@ -66,7 +66,7 @@ func Surface(store *Store, watched inspect.Watched) (web.Routes[effect.Unit, Ref
 	if err != nil {
 		return web.Routes[effect.Unit, Refusal]{}, err
 	}
-	watched.Surface = described.Declarations
+	watched.Surface = described.Declarations()
 
 	inspecting, err := inspect.Routes[effect.Unit, Refusal](watched, inspect.DefaultAt)
 	if err != nil {

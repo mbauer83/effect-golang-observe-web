@@ -69,7 +69,7 @@ func TestTheTreeIsFlattenedByDepthAndOffsetFromTheEarliestSpan(t *testing.T) {
 	// carried, so neither the description nor the page has to recurse; the
 	// offsets are relative, because an absolute clock reading would make the
 	// page's arithmetic depend on whose clock it was.
-	watched := inspect.Watched{Window: windowOf(t,
+	watched := &inspect.Watched{Window: windowOf(t,
 		spanStarted(1, 0, "outer", 0),
 		spanStarted(2, 1, "inner", 2*time.Millisecond),
 		spanEnded(2, "inner", 3*time.Millisecond, time.Millisecond, effect.EventStatusSuccess),
@@ -108,7 +108,7 @@ func TestTheTreeIsFlattenedByDepthAndOffsetFromTheEarliestSpan(t *testing.T) {
 func TestAnOpenSpanCarriesItsAgeBecauseItHasNoDuration(t *testing.T) {
 	running := trace.Watch()
 	running.Observe(nil, spanStarted(1, 0, "waiting", 0))
-	watched := inspect.Watched{Running: running}
+	watched := &inspect.Watched{Running: running}
 
 	taken := watched.Take(at(2 * time.Minute))
 	if len(taken.OpenSpans) != 1 {
@@ -133,7 +133,7 @@ func TestRunningFibersAreFlattenedWithTheirAges(t *testing.T) {
 		Kind: effect.EventFiberStarted, Timestamp: at(time.Second),
 		Operation: "handle", FiberID: 2, ParentFiber: 1,
 	})
-	watched := inspect.Watched{Fibers: fibers}
+	watched := &inspect.Watched{Fibers: fibers}
 
 	taken := watched.Take(at(3 * time.Second))
 	if len(taken.Fibers) != 2 {
@@ -151,10 +151,10 @@ func TestARuntimeThatIsNotCountingSaysSoRatherThanReportingZero(t *testing.T) {
 	// Two zeroes and "nobody is counting" look identical otherwise, and the
 	// difference matters: the counters are off by default because they cost a
 	// pair of atomics per fiber and per resource.
-	if taken := (inspect.Watched{}).Take(at(0)); taken.Owned.Counted {
+	if taken := (&inspect.Watched{}).Take(at(0)); taken.Owned.Counted {
 		t.Fatalf("expected no count to be claimed, got %+v", taken.Owned)
 	}
-	watched := inspect.Watched{
+	watched := &inspect.Watched{
 		Owned: func() effect.LiveWork { return effect.LiveWork{Fibers: 2, Resources: 3} },
 	}
 	taken := watched.Take(at(0))
@@ -167,15 +167,13 @@ func TestASnapshotRoundTripsThroughItsOwnDescription(t *testing.T) {
 	// What makes a script reading the inspector a client of a contract rather
 	// than of a guess: the shape it decodes with is the shape the inspector
 	// publishes.
-	watched := inspect.Watched{
+	watched := &inspect.Watched{
 		Window: windowOf(t,
 			spanStarted(1, 0, "outer", 0),
 			spanEnded(1, "outer", time.Millisecond, time.Millisecond, effect.EventStatusSuccess),
 		),
-		Surface: func() []web.Declaration {
-			return []web.Declaration{
-				{Method: "GET", Path: "/notes", Summary: "List the notes", Status: 200},
-			}
+		Surface: []web.Declaration{
+			{Method: "GET", Path: "/notes", Summary: "List the notes", Status: 200},
 		},
 	}
 	taken := watched.Take(at(0))
@@ -202,16 +200,13 @@ func TestASnapshotRoundTripsThroughItsOwnDescription(t *testing.T) {
 func TestTheSurfaceReportedIsWhateverTheCallerSays(t *testing.T) {
 	// The inspector reports what it is given and makes no judgement about it.
 	// A program that wants its own routes shown reports those; one that wants
-	// the inspector's shown too reports both, which is what the function form
-	// is for -- it is read when a reading is taken, so a caller may close over
-	// routes that have not been assembled yet.
-	watched := inspect.Watched{
-		Surface: func() []web.Declaration {
-			return []web.Declaration{
-				{Method: "GET", Path: "/notes", Status: 200},
-				{Method: "GET", Path: "/inspect/snapshot", Status: 200},
-			}
-		},
+	// the inspector's shown too reports both -- which it can assign after
+	// handing the handle over, because the field is read when a reading is
+	// taken and not when the handle was given.
+	watched := &inspect.Watched{}
+	watched.Surface = []web.Declaration{
+		{Method: "GET", Path: "/notes", Status: 200},
+		{Method: "GET", Path: "/inspect/snapshot", Status: 200},
 	}
 
 	taken := watched.Take(at(0))
@@ -224,7 +219,7 @@ func TestTheSurfaceReportedIsWhateverTheCallerSays(t *testing.T) {
 
 	// And nothing at all when there is nothing to say, rather than a nil the
 	// description would have to allow.
-	if bare := (inspect.Watched{}).Take(at(0)); bare.Routes == nil || len(bare.Routes) != 0 {
+	if bare := (&inspect.Watched{}).Take(at(0)); bare.Routes == nil || len(bare.Routes) != 0 {
 		t.Fatalf("expected an empty surface, got %#v", bare.Routes)
 	}
 }

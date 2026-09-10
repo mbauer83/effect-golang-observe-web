@@ -18,10 +18,16 @@ import (
 // Watched is what an inspector reads.
 //
 // Named parts rather than an interface, because there is nothing to abstract
-// over: these are the four values observe produces and the declarations a
-// web.Routes already carries. A caller assembles them however it likes -- the
-// composition is observe.Fanout's business, not this one's -- and hands the
-// pieces over.
+// over: these are the values observe produces and the declarations a
+// web.Routes already carries. Assemble them with Watching, or by hand when a
+// program wants an arrangement Watching does not offer.
+//
+// A handle and not a value: every field in it is already a live pointer to
+// something a running program is writing to, so it is passed and held as
+// *Watched throughout. That is not a style preference -- when it was passed
+// by value, assigning a field after handing it to Routes assigned it to a
+// copy the inspector had already taken, which is a mistake that compiles,
+// runs, and shows an empty panel.
 //
 // Every field is optional. An inspector with no collector shows no
 // measurements rather than refusing to start, because a program that only
@@ -54,16 +60,11 @@ type Watched struct {
 	// Surface names the routes being served, which is what a runtime-level
 	// tool cannot know.
 	//
-	// A function, as Owned is, so what a reading reports is what the surface
-	// says at that moment rather than what it said when this was assembled.
-	// web.Routes.Declarations is a method value, so saying it costs nothing.
-	//
-	// A Watched is handed over by value, so it must be complete when Routes
-	// or Surface is called: assigning a field afterwards assigns it to a copy
-	// the inspector has already taken. That is what the function is for in a
-	// surface that includes the inspector's own routes -- close over the
-	// variable the assembled routes will land in, and the reading finds them.
-	Surface func() []web.Declaration
+	// Assigned whenever it is known, which for a surface that includes the
+	// inspector's own routes is after those routes have been assembled. That
+	// works because this is a handle: the inspector reads the field when a
+	// snapshot is taken, not when it was given the handle.
+	Surface []web.Declaration
 }
 
 // Take reads everything at once.
@@ -73,7 +74,7 @@ type Watched struct {
 // snapshot is therefore nearly consistent rather than consistent, which is
 // what any tool reading a running program gets and is worth saying rather
 // than implying.
-func (watched Watched) Take(now time.Time) Snapshot {
+func (watched *Watched) Take(now time.Time) Snapshot {
 	taken := Snapshot{
 		TakenAt:      now.UTC().Format(time.RFC3339Nano),
 		Fibers:       []Fiber{},
@@ -83,8 +84,8 @@ func (watched Watched) Take(now time.Time) Snapshot {
 		Routes:       []Route{},
 		Costs:        []Cost{},
 	}
-	if watched.Surface != nil {
-		taken.Routes = routesOf(watched.Surface())
+	if len(watched.Surface) > 0 {
+		taken.Routes = routesOf(watched.Surface)
 	}
 	if watched.Running != nil {
 		taken.OpenSpans = flatten(watched.Running.Open(), now)

@@ -44,7 +44,7 @@ func inspecting(t *testing.T) *web.Client {
 	// The route names and the report's stage names: the vocabulary the
 	// aggregate and the account are both bounded by.
 	named := append(inspect.Names(declared()), inspected.Stages...)
-	watched := inspect.Watched{
+	watched := &inspect.Watched{
 		Running:   trace.Watch(),
 		Fibers:    trace.WatchFibers(),
 		Window:    window,
