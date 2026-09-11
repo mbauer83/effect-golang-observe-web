@@ -140,6 +140,8 @@ func measurementsOf(snapshot metrics.Snapshot) []Measurement {
 		}
 		if held, timed := snapshot.Durations[label]; timed {
 			one.MedianMicros = held.Quantile(0.5).Microseconds()
+			one.P95Micros = held.Quantile(0.95).Microseconds()
+			one.P99Micros = held.Quantile(0.99).Microseconds()
 			one.MaxMicros = held.Max.Microseconds()
 		}
 		if held, waited := snapshot.Delays[label]; waited {

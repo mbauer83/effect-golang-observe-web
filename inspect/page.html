@@ -294,6 +294,11 @@
     <div class="details" id="details"></div>
   </section>
   <section>
+    <h2>Endpoints</h2>
+    <p class="caveat" id="endpointcaveat"></p>
+    <div class="scroll"><table id="endpoints"></table></div>
+  </section>
+  <section>
     <h2>Measurements</h2>
     <div class="scroll"><table id="measurements"></table></div>
   </section>
@@ -1092,7 +1097,22 @@ function renderTable(into, columns, rows, cell, decorate) {
 const measurementColumns = [
   { name: "kind" }, { name: "operation" }, { name: "status" },
   { name: "count", numeric: true }, { name: "median", numeric: true },
+  { name: "p95", numeric: true }, { name: "p99", numeric: true },
   { name: "longest", numeric: true }, { name: "waited", numeric: true },
+];
+
+// What one endpoint answers in and what it spends doing it.
+//
+// The table most people open this page for, and it is a join rather than a
+// reading: how long came from the span the route ran in, and what it cost came
+// from the account of what the process spent while that span was open. Both
+// are keyed by the route, which is why they can be read side by side at all.
+const endpointColumns = [
+  { name: "endpoint" }, { name: "requests", numeric: true },
+  { name: "median", numeric: true }, { name: "p95", numeric: true },
+  { name: "p99", numeric: true }, { name: "slowest", numeric: true },
+  { name: "bytes p50", numeric: true }, { name: "bytes p95", numeric: true },
+  { name: "bytes p99", numeric: true }, { name: "allocs/run", numeric: true },
 ];
 
 const routeColumns = [
@@ -1103,6 +1123,8 @@ const routeColumns = [
 const costColumns = [
   { name: "name" }, { name: "kind" }, { name: "runs", numeric: true },
   { name: "per run, recent", numeric: true }, { name: "per run, all", numeric: true },
+  { name: "p50", numeric: true }, { name: "p95", numeric: true },
+  { name: "p99", numeric: true },
   { name: "allocs/run", numeric: true }, { name: "mean size", numeric: true },
   { name: "cpu", numeric: true }, { name: "longest", numeric: true },
 ];
@@ -1285,6 +1307,9 @@ function renderCostRows(into, costs) {
         return recent === null ? "-" : bytes(recent);
       }
       case "per run, all": return bytes(row.perRunBytes);
+      case "p50": return bytes(row.allocatedP50Bytes);
+      case "p95": return bytes(row.allocatedP95Bytes);
+      case "p99": return bytes(row.allocatedP99Bytes);
       case "allocs/run": return row.objectsPerRun || "-";
       case "mean size": return bytes(row.meanObjectBytes);
       case "cpu": return row.cpuSecondsDuring
@@ -1339,11 +1364,61 @@ function render(snapshot) {
       case "status": return row.status || "-";
       case "count": return row.count;
       case "median": return micros(row.medianMicros) || "-";
+      case "p95": return micros(row.p95Micros) || "-";
+      case "p99": return micros(row.p99Micros) || "-";
       case "longest": return micros(row.maxMicros) || "-";
       case "waited": return micros(row.waitedMicros) || "-";
     }
   });
+  renderEndpoints(el("endpoints"), el("endpointcaveat"), snapshot);
   renderRoutes(el("routes"), snapshot.routes);
+}
+
+// renderEndpoints joins what each route answered in with what it spent.
+//
+// Only the routes that have been asked for: a surface declares forty and a
+// reader wants the ones with traffic, and a table of thirty-eight empty rows
+// buries the two that matter.
+function renderEndpoints(into, caveat, snapshot) {
+  const timed = new Map();
+  for (const row of snapshot.measurements || []) {
+    if (row.kind === "span_ended" && row.operation.includes(" /")) {
+      timed.set(row.operation, row);
+    }
+  }
+  const spent = new Map();
+  for (const row of snapshot.costs || []) {
+    spent.set(row.name, row);
+  }
+  const endpoints = [...timed.keys()]
+    .map((named) => ({ named, timed: timed.get(named), spent: spent.get(named) }))
+    .sort((one, other) => (other.timed.p99Micros || 0) - (one.timed.p99Micros || 0));
+
+  // The quantiles either side of this table are not the same kind of number,
+  // and reading them as one would be wrong: a time is a bucket bound from a
+  // histogram, and a size is a run that happened, read from the runs kept.
+  const kept = endpoints.reduce(
+    (most, one) => Math.max(most, (one.spent && one.spent.keptRuns) || 0), 0);
+  caveat.textContent = endpoints.length
+    ? "times are bucket bounds; sizes are measured runs, from the last "
+      + kept + " kept per endpoint"
+    : "";
+
+  renderTable(into, endpointColumns, endpoints, (row, column) => {
+    const spentHere = row.spent;
+    switch (column) {
+      case "endpoint": return row.named;
+      case "requests": return row.timed.count;
+      case "median": return micros(row.timed.medianMicros) || "-";
+      case "p95": return micros(row.timed.p95Micros) || "-";
+      case "p99": return micros(row.timed.p99Micros) || "-";
+      case "slowest": return micros(row.timed.maxMicros) || "-";
+      case "bytes p50": return spentHere ? bytes(spentHere.allocatedP50Bytes) : "-";
+      case "bytes p95": return spentHere ? bytes(spentHere.allocatedP95Bytes) : "-";
+      case "bytes p99": return spentHere ? bytes(spentHere.allocatedP99Bytes) : "-";
+      case "allocs/run": return spentHere ? (spentHere.objectsPerRun || "-") : "-";
+    }
+  });
 }
 
 // The surface, with the paths that can be opened as links.

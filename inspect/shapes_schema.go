@@ -103,6 +103,14 @@ var measurementSchema = schema.Struct[Measurement]("Measurement",
 		func(value Measurement) int64 { return value.MedianMicros },
 		func(value *Measurement, field int64) { value.MedianMicros = field }).
 		Documented("MedianMicros is a bucket bound, not an interpolation: the bound at or below which half the measurements fell."),
+	schema.FieldOf("p95Micros", schema.Int64(),
+		func(value Measurement) int64 { return value.P95Micros },
+		func(value *Measurement, field int64) { value.P95Micros = field }).
+		Documented("P95Micros is the bound at or below which nineteen measurements in twenty fell."),
+	schema.FieldOf("p99Micros", schema.Int64(),
+		func(value Measurement) int64 { return value.P99Micros },
+		func(value *Measurement, field int64) { value.P99Micros = field }).
+		Documented("P99Micros is the bound at or below which ninety-nine measurements in a hundred fell."),
 	schema.FieldOf("maxMicros", schema.Int64(),
 		func(value Measurement) int64 { return value.MaxMicros },
 		func(value *Measurement, field int64) { value.MaxMicros = field }),

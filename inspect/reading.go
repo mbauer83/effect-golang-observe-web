@@ -78,17 +78,22 @@ func costsOf(accounted []process.Cost, origin time.Time) []Cost {
 	shown := make([]Cost, 0, len(accounted))
 	for _, cost := range accounted {
 		shown = append(shown, Cost{
-			Name:             cost.Name,
-			Times:            int64(cost.Times),
-			AllocatedDuring:  int64(cost.AllocatedDuring),
-			PerRunBytes:      int64(cost.PerRun()),
-			ObjectsPerRun:    int64(cost.ObjectsPerRun()),
-			MeanObjectBytes:  int64(cost.MeanObjectBytes()),
-			CPUSecondsDuring: cost.CPUSecondsDuring,
-			LongestMicros:    cost.Longest.Microseconds(),
-			Collections:      int64(cost.Collections),
-			Sizes:            sizesOf(cost.Spread.Banded()),
-			Runs:             runsOf(cost.Runs, origin),
+			Name:              cost.Name,
+			Times:             int64(cost.Times),
+			AllocatedDuring:   int64(cost.AllocatedDuring),
+			PerRunBytes:       int64(cost.PerRun()),
+			ObjectsPerRun:     int64(cost.ObjectsPerRun()),
+			MeanObjectBytes:   int64(cost.MeanObjectBytes()),
+			AllocatedP50Bytes: int64(cost.AllocatedAt(0.5)),
+			AllocatedP95Bytes: int64(cost.AllocatedAt(0.95)),
+			AllocatedP99Bytes: int64(cost.AllocatedAt(0.99)),
+			ObjectsP95:        int64(cost.ObjectsAt(0.95)),
+			KeptRuns:          int64(cost.KeptRunCount()),
+			CPUSecondsDuring:  cost.CPUSecondsDuring,
+			LongestMicros:     cost.Longest.Microseconds(),
+			Collections:       int64(cost.Collections),
+			Sizes:             sizesOf(cost.Spread.Banded()),
+			Runs:              runsOf(cost.Runs, origin),
 		})
 	}
 	return shown
