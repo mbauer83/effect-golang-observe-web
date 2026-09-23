@@ -35,7 +35,7 @@ func TestAMeasuredStageAppearsAsASpanUnderItsRoute(t *testing.T) {
 		t.Fatalf("expected the route's own span, got %v", names(snapshot.Trace))
 	}
 	// The surface is detailing its phases, so the route's own parts are
-	// spanned too and the stages sit inside the handler one: route ->
+	// spanned too and the stages sit inside the handling one: route ->
 	// handler -> stage. That is the shape a waterfall shows, and asserting
 	// the relationship rather than a number keeps this readable when another
 	// phase is added.
