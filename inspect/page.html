@@ -1181,7 +1181,7 @@ try {
 // in one table.
 function kindOf(name) {
   if (name === "other") return "undeclared";
-  if (["decoding", "handling", "encoding"].includes(name)) return "phase";
+  if (["decode", "handle", "encode"].includes(name)) return "phase";
   const routes = (latest && latest.routes) || [];
   if (routes.some((route) => route.method + " " + route.path === name)) return "route";
   // The inspector's own routes are not in the surface it is watching, and

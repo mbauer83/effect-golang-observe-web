@@ -39,11 +39,11 @@ func TestAMeasuredStageAppearsAsASpanUnderItsRoute(t *testing.T) {
 	// handler -> stage. That is the shape a waterfall shows, and asserting
 	// the relationship rather than a number keeps this readable when another
 	// phase is added.
-	handler, phased := under["handling"]
+	handler, phased := under["handle"]
 	if !phased || handler.Depth != 1 {
 		t.Fatalf("expected a handling phase under the route, got %v", names(snapshot.Trace))
 	}
-	for _, phase := range []string{"decoding", "encoding"} {
+	for _, phase := range []string{"decode", "encode"} {
 		if span, present := under[phase]; !present || span.Depth != 1 {
 			t.Fatalf("expected the %s phase under the route, got %v", phase, names(snapshot.Trace))
 		}

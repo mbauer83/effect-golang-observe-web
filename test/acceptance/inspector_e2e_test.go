@@ -167,7 +167,7 @@ func TestEveryRequestBecomesASpanNamedForItsRoutePattern(t *testing.T) {
 	if failures["GET /notes/{title}"] != 1 {
 		t.Fatalf("expected the refused request's route to show as failed, got %v", failures)
 	}
-	if failures["handling"] != 1 {
+	if failures["handle"] != 1 {
 		t.Fatalf("expected the failure attributed to the handling phase, got %v", failures)
 	}
 }
