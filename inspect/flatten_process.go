@@ -10,18 +10,18 @@ import (
 	"github.com/mbauer83/effect-golang-observe/process"
 )
 
-// sampled takes a reading, keeps it in the series, and reads the whole series
+// sampleProcess takes a reading, keeps it in the series, and reads the whole series
 // out as gauges, a window and a set of points.
 //
 // Taking the reading here is what makes the chart's resolution the rate the
 // inspector is looked at. Nothing samples on a schedule: a sampler would be a
 // goroutine this would have to own, and the runtime deliberately does not
 // spawn those for a capability.
-func sampled(series *process.Series) Process {
+func sampleProcess(series *process.Series) Process {
 	latest := series.Sample()
 	readings := series.Readings()
 
-	shown := Process{
+	result := Process{
 		Sampled:     true,
 		HeapBytes:   int64(latest.HeapBytes),
 		HeapObjects: int64(latest.HeapObjects),
@@ -37,14 +37,14 @@ func sampled(series *process.Series) Process {
 		GCCycles:    int64(latest.GCCycles),
 		Points:      pointsOf(readings),
 	}
-	if recent, measurable := series.Recent(); measurable {
-		shown.OverMicros = recent.Over.Microseconds()
-		shown.AllocatedBytes = int64(recent.AllocatedBytes)
-		shown.BytesPerSecond = recent.AllocationRate()
-		shown.Busy = recent.Busy()
-		shown.Collecting = recent.Collecting()
+	if recent, measurable := series.Change(); measurable {
+		result.OverMicros = recent.Duration.Microseconds()
+		result.AllocatedBytes = int64(recent.AllocatedBytes)
+		result.BytesPerSecond = recent.AllocationRate()
+		result.Busy = recent.Busy()
+		result.GCShare = recent.GCShare()
 	}
-	return shown
+	return result
 }
 
 // pointsOf turns the readings into points, each offset from the first.
@@ -64,8 +64,8 @@ func pointsOf(readings []process.Reading) []Point {
 			GoalBytes:  int64(reading.GoalBytes),
 		}
 		if index > 0 {
-			point.AtMicros = reading.Taken.Sub(readings[0].Taken).Microseconds()
-			step := process.Between(readings[index-1], reading)
+			point.AtMicros = reading.Time.Sub(readings[0].Time).Microseconds()
+			step := process.Diff(readings[index-1], reading)
 			point.BytesPerSecond = step.AllocationRate()
 			point.Busy = step.Busy()
 		}
@@ -74,29 +74,29 @@ func pointsOf(readings []process.Reading) []Point {
 	return points
 }
 
-func costsOf(accounted []process.Cost, origin time.Time) []Cost {
-	shown := make([]Cost, 0, len(accounted))
-	for _, cost := range accounted {
-		shown = append(shown, Cost{
+func costsOf(costs []process.Cost, origin time.Time) []Cost {
+	result := make([]Cost, 0, len(costs))
+	for _, cost := range costs {
+		result = append(result, Cost{
 			Name:              cost.Name,
 			Times:             int64(cost.Times),
-			AllocatedDuring:   int64(cost.AllocatedDuring),
+			AllocatedDuring:   int64(cost.BytesDuring),
 			PerRunBytes:       int64(cost.PerRun()),
 			ObjectsPerRun:     int64(cost.ObjectsPerRun()),
 			MeanObjectBytes:   int64(cost.MeanObjectBytes()),
-			AllocatedP50Bytes: int64(cost.AllocatedAt(0.5)),
-			AllocatedP95Bytes: int64(cost.AllocatedAt(0.95)),
-			AllocatedP99Bytes: int64(cost.AllocatedAt(0.99)),
+			AllocatedP50Bytes: int64(cost.BytesAt(0.5)),
+			AllocatedP95Bytes: int64(cost.BytesAt(0.95)),
+			AllocatedP99Bytes: int64(cost.BytesAt(0.99)),
 			ObjectsP95:        int64(cost.ObjectsAt(0.95)),
-			KeptRuns:          int64(cost.KeptRunCount()),
+			SampleSize:        int64(cost.RunCount()),
 			CPUSecondsDuring:  cost.CPUSecondsDuring,
 			LongestMicros:     cost.Longest.Microseconds(),
 			Collections:       int64(cost.Collections),
-			Sizes:             sizesOf(cost.Spread.Banded()),
+			Sizes:             sizesOf(cost.Spread.Bands()),
 			Runs:              runsOf(cost.Runs, origin),
 		})
 	}
-	return shown
+	return result
 }
 
 // runsOf reads the recent runs onto the wire, offset from the same origin the
@@ -108,22 +108,22 @@ func costsOf(accounted []process.Cost, origin time.Time) []Cost {
 // attributed to it -- and sending it would grow with the account's memory
 // rather than with what is being looked at.
 func runsOf(runs []process.Run, origin time.Time) []Run {
-	shown := make([]Run, 0, len(runs))
+	result := make([]Run, 0, len(runs))
 	if origin.IsZero() {
-		return shown
+		return result
 	}
 	for _, run := range runs {
-		if run.Ended.Before(origin) {
+		if run.EndTime.Before(origin) {
 			continue
 		}
-		shown = append(shown, Run{
-			EndedMicros: run.Ended.Sub(origin).Microseconds(),
-			Micros:      run.Change.Over.Microseconds(),
-			Bytes:       int64(run.Change.AllocatedBytes),
-			Objects:     int64(run.Change.AllocatedObjects),
+		result = append(result, Run{
+			EndMicros: run.EndTime.Sub(origin).Microseconds(),
+			Micros:    run.Change.Duration.Microseconds(),
+			Bytes:     int64(run.Change.AllocatedBytes),
+			Objects:   int64(run.Change.AllocatedObjects),
 		})
 	}
-	return shown
+	return result
 }
 
 // sizesOf reads the size bands onto the wire.

@@ -24,23 +24,23 @@ import (
 	"github.com/mbauer83/effect-golang/effect"
 )
 
-// plainly serves the program's own routes, observed or not, and returns a
+// servePlain serves the program's own routes, observed or not, and returns a
 // client for them together with the window the events land in.
 //
 // Deliberately not the example's Surface: this is about what the setting does,
 // so the routes here are declared with web.Handle and nothing else.
-func plainly(t *testing.T, observed bool) (*web.Client, *observe.Recent) {
+func servePlain(t *testing.T, observed bool) (*web.Client, *observe.Recent) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	window, err := observe.Keep(256)
+	window, err := observe.NewRecent(256)
 	if err != nil {
 		t.Fatal(err)
 	}
 	runtime, err := effect.NewRuntime(
-		effect.WithObserver(observe.Fanout(trace.Watch(), window)),
+		effect.WithObserver(observe.Fanout(trace.NewSpans(), window)),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -64,19 +64,19 @@ func plainly(t *testing.T, observed bool) (*web.Client, *observe.Recent) {
 	}
 	// The one difference between an observed program and an unobserved one.
 	if observed {
-		surface = surface.Wrapping(
-			inspect.Observing[effect.Unit, inspected.Refusal](process.Accounting()))
+		surface = surface.WithMiddleware(
+			inspect.Tracer[effect.Unit, inspected.Refusal](process.NewCosts()))
 	}
 
 	boundary, err := inspected.Boundary(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
-	serving, stop := context.WithCancel(context.Background())
+	ctx, stop := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		runtime.Run(serving, effect.Unit{}, inspected.Serve(listener, boundary, surface))
+		runtime.Run(ctx, effect.Unit{}, inspected.Serve(listener, boundary, surface))
 	}()
 	t.Cleanup(func() {
 		stop()
@@ -90,30 +90,30 @@ func plainly(t *testing.T, observed bool) (*web.Client, *observe.Recent) {
 }
 
 func TestOneSettingObservesEveryRouteOfASurfaceWrittenPlainly(t *testing.T) {
-	client, window := plainly(t, true)
-	fetched(t, client, http.MethodGet, "/notes")
-	fetched(t, client, http.MethodGet, "/notes/First")
+	client, window := servePlain(t, true)
+	fetch(t, client, http.MethodGet, "/notes")
+	fetch(t, client, http.MethodGet, "/notes/First")
 
-	assembled := trace.Assemble(window.Events())
-	named := map[string]int{}
-	for _, span := range assembled.Spans() {
-		named[span.Name]++
+	tree := trace.Assemble(window.Events())
+	counts := map[string]int{}
+	for _, span := range tree.Spans() {
+		counts[span.Name]++
 	}
 	// Both routes, each under its own pattern, from routes declared with
 	// web.Handle and nothing else.
-	if named["GET /notes"] != 1 || named["GET /notes/{title}"] != 1 {
-		t.Fatalf("expected a span per route, got %v", named)
+	if counts["GET /notes"] != 1 || counts["GET /notes/{title}"] != 1 {
+		t.Fatalf("expected a span per route, got %v", counts)
 	}
 	// Annotated with the method and the pattern, which is what a reader of a
 	// trace needs and what a bounded label is made from.
-	for _, span := range assembled.Spans() {
-		held := map[string]string{}
+	for _, span := range tree.Spans() {
+		attributes := map[string]string{}
 		for _, attribute := range span.Attributes {
-			held[attribute.Key] = attribute.Value.String()
+			attributes[attribute.Key] = attribute.Value.String()
 		}
-		if held["method"] != http.MethodGet || held["route"] == "" {
+		if attributes["method"] != http.MethodGet || attributes["route"] == "" {
 			t.Fatalf("expected %s annotated with its method and route, got %v",
-				span.Name, held)
+				span.Name, attributes)
 		}
 	}
 }
@@ -121,17 +121,17 @@ func TestOneSettingObservesEveryRouteOfASurfaceWrittenPlainly(t *testing.T) {
 func TestNotApplyingTheSettingObservesNothing(t *testing.T) {
 	// Which is how a program turns it off: a flag at start-up, not a
 	// differently written surface.
-	client, window := plainly(t, false)
-	fetched(t, client, http.MethodGet, "/notes")
-	fetched(t, client, http.MethodGet, "/notes/First")
+	client, window := servePlain(t, false)
+	fetch(t, client, http.MethodGet, "/notes")
+	fetch(t, client, http.MethodGet, "/notes/First")
 
-	assembled := trace.Assemble(window.Events())
-	if spans := assembled.Spans(); len(spans) != 0 {
+	tree := trace.Assemble(window.Events())
+	if spans := tree.Spans(); len(spans) != 0 {
 		t.Fatalf("expected no spans from an unobserved surface, got %v", spans)
 	}
 	// The events still arrived -- the runtime is still observed -- so this is
 	// the setting's absence and not a broken observer.
-	if window.Seen() == 0 {
+	if window.Count() == 0 {
 		t.Fatal("expected the runtime's own events even unobserved")
 	}
 }

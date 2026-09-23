@@ -29,27 +29,27 @@ var document embed.FS
 // cannot change while the program runs, so re-reading them would be a syscall
 // per refresh for bytes that are already correct.
 func Page() []byte {
-	return embedded.page
+	return static.page
 }
 
 // Script and Stylesheet are the vendored chart library, served beside the
 // page. Public because a program mounting the inspector by hand needs to be
 // able to serve them.
 func Script() []byte {
-	return embedded.script
+	return static.script
 }
 
 func Stylesheet() []byte {
-	return embedded.stylesheet
+	return static.stylesheet
 }
 
 // Licence is the vendored library's licence, served beside it so the
 // attribution travels with the code rather than only with the repository.
 func Licence() []byte {
-	return embedded.licence
+	return static.licence
 }
 
-var embedded = read()
+var static = read()
 
 type files struct {
 	page       []byte
@@ -68,7 +68,7 @@ func read() files {
 }
 
 func mustRead(name string) []byte {
-	read, err := document.ReadFile(name)
+	content, err := document.ReadFile(name)
 	if err != nil {
 		// Unreachable: these are embedded at build time, so a missing one is a
 		// build failure rather than a run-time outcome. Panicking says that,
@@ -76,5 +76,5 @@ func mustRead(name string) []byte {
 		// that cannot happen.
 		panic("inspect: the embedded file " + name + " is missing: " + err.Error())
 	}
-	return read
+	return content
 }

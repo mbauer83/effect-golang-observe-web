@@ -54,7 +54,7 @@ func spanEnded(
 // folds a trace from.
 func windowOf(t *testing.T, events ...effect.RuntimeEvent) *observe.Recent {
 	t.Helper()
-	window, err := observe.Keep(64)
+	window, err := observe.NewRecent(64)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,18 +69,18 @@ func TestTheTreeIsFlattenedByDepthAndOffsetFromTheEarliestSpan(t *testing.T) {
 	// carried, so neither the description nor the page has to recurse; the
 	// offsets are relative, because an absolute clock reading would make the
 	// page's arithmetic depend on whose clock it was.
-	watched := &inspect.Watched{Window: windowOf(t,
+	telemetry := &inspect.Telemetry{Window: windowOf(t,
 		spanStarted(1, 0, "outer", 0),
 		spanStarted(2, 1, "inner", 2*time.Millisecond),
 		spanEnded(2, "inner", 3*time.Millisecond, time.Millisecond, effect.EventStatusSuccess),
 		spanEnded(1, "outer", 5*time.Millisecond, 5*time.Millisecond, effect.EventStatusSuccess),
 	)}
 
-	taken := watched.Take(at(time.Second))
-	if len(taken.Trace) != 2 {
-		t.Fatalf("expected both spans, got %d", len(taken.Trace))
+	snapshot := telemetry.Take(at(time.Second))
+	if len(snapshot.Trace) != 2 {
+		t.Fatalf("expected both spans, got %d", len(snapshot.Trace))
 	}
-	outer, inner := taken.Trace[0], taken.Trace[1]
+	outer, inner := snapshot.Trace[0], snapshot.Trace[1]
 	if outer.Depth != 0 || inner.Depth != 1 {
 		t.Fatalf("expected the nesting as depths, got %d and %d", outer.Depth, inner.Depth)
 	}
@@ -106,25 +106,25 @@ func TestTheTreeIsFlattenedByDepthAndOffsetFromTheEarliestSpan(t *testing.T) {
 }
 
 func TestAnOpenSpanCarriesItsAgeBecauseItHasNoDuration(t *testing.T) {
-	running := trace.Watch()
-	running.Observe(nil, spanStarted(1, 0, "waiting", 0))
-	watched := &inspect.Watched{Running: running}
+	spans := trace.NewSpans()
+	spans.Observe(nil, spanStarted(1, 0, "waiting", 0))
+	telemetry := &inspect.Telemetry{Spans: spans}
 
-	taken := watched.Take(at(2 * time.Minute))
-	if len(taken.OpenSpans) != 1 {
-		t.Fatalf("expected the open span, got %d", len(taken.OpenSpans))
+	snapshot := telemetry.Take(at(2 * time.Minute))
+	if len(snapshot.OpenSpans) != 1 {
+		t.Fatalf("expected the open span, got %d", len(snapshot.OpenSpans))
 	}
-	open := taken.OpenSpans[0]
-	if !open.Open || open.Micros != 0 {
-		t.Fatalf("expected an open span with no duration, got %+v", open)
+	span := snapshot.OpenSpans[0]
+	if !span.Open || span.Micros != 0 {
+		t.Fatalf("expected an open span with no duration, got %+v", span)
 	}
-	if open.AgeMicros != (2 * time.Minute).Microseconds() {
-		t.Fatalf("expected the age since it started, got %d", open.AgeMicros)
+	if span.AgeMicros != (2 * time.Minute).Microseconds() {
+		t.Fatalf("expected the age since it started, got %d", span.AgeMicros)
 	}
 }
 
 func TestRunningFibersAreFlattenedWithTheirAges(t *testing.T) {
-	fibers := trace.WatchFibers()
+	fibers := trace.NewFibers()
 	fibers.Observe(nil, effect.RuntimeEvent{
 		Kind: effect.EventFiberStarted, Timestamp: at(0),
 		Operation: "serve", FiberID: 1,
@@ -133,17 +133,17 @@ func TestRunningFibersAreFlattenedWithTheirAges(t *testing.T) {
 		Kind: effect.EventFiberStarted, Timestamp: at(time.Second),
 		Operation: "handle", FiberID: 2, ParentFiber: 1,
 	})
-	watched := &inspect.Watched{Fibers: fibers}
+	telemetry := &inspect.Telemetry{Fibers: fibers}
 
-	taken := watched.Take(at(3 * time.Second))
-	if len(taken.Fibers) != 2 {
-		t.Fatalf("expected both fibers, got %d", len(taken.Fibers))
+	snapshot := telemetry.Take(at(3 * time.Second))
+	if len(snapshot.Fibers) != 2 {
+		t.Fatalf("expected both fibers, got %d", len(snapshot.Fibers))
 	}
-	if taken.Fibers[0].Depth != 0 || taken.Fibers[1].Depth != 1 {
-		t.Fatalf("expected the forking as depths, got %v", taken.Fibers)
+	if snapshot.Fibers[0].Depth != 0 || snapshot.Fibers[1].Depth != 1 {
+		t.Fatalf("expected the forking as depths, got %v", snapshot.Fibers)
 	}
-	if taken.Fibers[0].AgeMicros != (3 * time.Second).Microseconds() {
-		t.Fatalf("expected the forker's age, got %d", taken.Fibers[0].AgeMicros)
+	if snapshot.Fibers[0].AgeMicros != (3 * time.Second).Microseconds() {
+		t.Fatalf("expected the forker's age, got %d", snapshot.Fibers[0].AgeMicros)
 	}
 }
 
@@ -151,15 +151,15 @@ func TestARuntimeThatIsNotCountingSaysSoRatherThanReportingZero(t *testing.T) {
 	// Two zeroes and "nobody is counting" look identical otherwise, and the
 	// difference matters: the counters are off by default because they cost a
 	// pair of atomics per fiber and per resource.
-	if taken := (&inspect.Watched{}).Take(at(0)); taken.Owned.Counted {
-		t.Fatalf("expected no count to be claimed, got %+v", taken.Owned)
+	if snapshot := (&inspect.Telemetry{}).Take(at(0)); snapshot.LiveWork.Counted {
+		t.Fatalf("expected no count to be claimed, got %+v", snapshot.LiveWork)
 	}
-	watched := &inspect.Watched{
-		Owned: func() effect.LiveWork { return effect.LiveWork{Fibers: 2, Resources: 3} },
+	telemetry := &inspect.Telemetry{
+		LiveWork: func() effect.LiveWork { return effect.LiveWork{Fibers: 2, Resources: 3} },
 	}
-	taken := watched.Take(at(0))
-	if !taken.Owned.Counted || taken.Owned.Fibers != 2 || taken.Owned.Resources != 3 {
-		t.Fatalf("unexpected count: %+v", taken.Owned)
+	snapshot := telemetry.Take(at(0))
+	if !snapshot.LiveWork.Counted || snapshot.LiveWork.Fibers != 2 || snapshot.LiveWork.Resources != 3 {
+		t.Fatalf("unexpected count: %+v", snapshot.LiveWork)
 	}
 }
 
@@ -167,7 +167,7 @@ func TestASnapshotRoundTripsThroughItsOwnDescription(t *testing.T) {
 	// What makes a script reading the inspector a client of a contract rather
 	// than of a guess: the shape it decodes with is the shape the inspector
 	// publishes.
-	watched := &inspect.Watched{
+	telemetry := &inspect.Telemetry{
 		Window: windowOf(t,
 			spanStarted(1, 0, "outer", 0),
 			spanEnded(1, "outer", time.Millisecond, time.Millisecond, effect.EventStatusSuccess),
@@ -176,24 +176,24 @@ func TestASnapshotRoundTripsThroughItsOwnDescription(t *testing.T) {
 			{Method: "GET", Path: "/notes", Summary: "List the notes", Status: 200},
 		},
 	}
-	taken := watched.Take(at(0))
+	snapshot := telemetry.Take(at(0))
 
-	written, err := inspect.Write(taken)
+	entity, err := inspect.Write(snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	read, err := inspect.Read(written)
+	result, err := inspect.Read(entity)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(read.Trace) != 1 || read.Trace[0].Name != "outer" {
-		t.Fatalf("the crossing changed the trace: %#v", read.Trace)
+	if len(result.Trace) != 1 || result.Trace[0].Name != "outer" {
+		t.Fatalf("the crossing changed the trace: %#v", result.Trace)
 	}
-	if len(read.Routes) != 1 || read.Routes[0].Path != "/notes" {
-		t.Fatalf("the crossing changed the surface: %#v", read.Routes)
+	if len(result.Routes) != 1 || result.Routes[0].Path != "/notes" {
+		t.Fatalf("the crossing changed the surface: %#v", result.Routes)
 	}
-	if read.TakenAt != taken.TakenAt {
-		t.Fatalf("the crossing changed the instant: %q against %q", read.TakenAt, taken.TakenAt)
+	if result.TakenAt != snapshot.TakenAt {
+		t.Fatalf("the crossing changed the instant: %q against %q", result.TakenAt, snapshot.TakenAt)
 	}
 }
 
@@ -203,23 +203,23 @@ func TestTheSurfaceReportedIsWhateverTheCallerSays(t *testing.T) {
 	// the inspector's shown too reports both -- which it can assign after
 	// handing the handle over, because the field is read when a reading is
 	// taken and not when the handle was given.
-	watched := &inspect.Watched{}
-	watched.Surface = []web.Declaration{
+	telemetry := &inspect.Telemetry{}
+	telemetry.Surface = []web.Declaration{
 		{Method: "GET", Path: "/notes", Status: 200},
 		{Method: "GET", Path: "/inspect/snapshot", Status: 200},
 	}
 
-	taken := watched.Take(at(0))
-	if len(taken.Routes) != 2 {
-		t.Fatalf("expected both declarations reported, got %v", taken.Routes)
+	snapshot := telemetry.Take(at(0))
+	if len(snapshot.Routes) != 2 {
+		t.Fatalf("expected both declarations reported, got %v", snapshot.Routes)
 	}
-	if taken.Routes[1].Path != "/inspect/snapshot" {
-		t.Fatalf("expected the inspector's own route reported when asked, got %v", taken.Routes)
+	if snapshot.Routes[1].Path != "/inspect/snapshot" {
+		t.Fatalf("expected the inspector's own route reported when asked, got %v", snapshot.Routes)
 	}
 
 	// And nothing at all when there is nothing to say, rather than a nil the
 	// description would have to allow.
-	if bare := (&inspect.Watched{}).Take(at(0)); bare.Routes == nil || len(bare.Routes) != 0 {
+	if bare := (&inspect.Telemetry{}).Take(at(0)); bare.Routes == nil || len(bare.Routes) != 0 {
 		t.Fatalf("expected an empty surface, got %#v", bare.Routes)
 	}
 }

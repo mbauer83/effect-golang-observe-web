@@ -11,13 +11,13 @@ import (
 	"github.com/mbauer83/effect-golang/effect"
 )
 
-// Observing is the setting that makes a surface's traffic visible: every route
+// Tracer is the setting that makes a surface's traffic visible: every route
 // becomes a span named for itself, annotated with its method and pattern.
 //
 // Applied once to the assembled surface and nowhere else:
 //
 //	surface, err := web.NewRoutes(routes...)
-//	surface = surface.Wrapping(inspect.Observing(costs))
+//	surface = surface.WithMiddleware(inspect.Tracer(costs))
 //
 // Which is the whole integration. Nothing about how the routes are declared or
 // handled changes, so observation cannot be forgotten one route at a time --
@@ -32,7 +32,7 @@ import (
 // and never the path that was asked for. A concrete path is an unbounded
 // value, and the rule that forbids it as a metric label forbids it as a span
 // name: a series per title is a series per request.
-func Observing[R, E any](costs *process.Costs) web.Matched[R, E] {
+func Tracer[R, E any](costs *process.Costs) web.RouteMiddleware[R, E] {
 	return func(
 		declaration web.Declaration,
 		handler web.Handler[R, E],
@@ -47,7 +47,7 @@ func Observing[R, E any](costs *process.Costs) web.Matched[R, E] {
 			// on nothing a reader of the trace can see. Measured, not
 			// reasoned: the same span reports [] one way round and
 			// [method=..., route=...] the other.
-			return process.Costing(costs, name, handler(request)).
+			return process.Track(costs, name, handler(request)).
 				WithName(name).
 				WithSpan(name).
 				Annotate(method, route)
@@ -62,25 +62,25 @@ func NameOf(declaration web.Declaration) string {
 
 // Names are the span names a surface's routes are observed under.
 //
-// It is what a caller passes to metrics.Naming and process.Accounting, which
+// It is what a caller passes to metrics.NewVocabulary and process.NewCosts, which
 // closes the loop: the vocabulary of a bounded aggregate comes from the same
 // declarations that dispatch the requests, so a route added to the surface is
 // measured without anybody remembering to add its name in a second place.
 //
-//	collected := metrics.Collect(metrics.Naming(inspect.Names(surface.Declarations())...))
+//	collector := metrics.NewCollector(metrics.NewVocabulary(inspect.Names(surface.Declarations())...))
 func Names(declarations []web.Declaration) []string {
-	named := make([]string, 0, len(declarations))
+	names := make([]string, 0, len(declarations))
 	for _, declaration := range declarations {
-		named = append(named, NameOf(declaration))
+		names = append(names, NameOf(declaration))
 	}
-	return named
+	return names
 }
 
-// Sampling measures a surface's phases into the account, so decoding and
+// Sampler measures a surface's phases into the account, so decoding and
 // encoding say what they allocated and not only how long they took.
 //
-//	surface = surface.Measuring(inspect.Sampling(watched.Costs)).
-//	    Wrapping(inspect.Observing[Env, Refusal](watched.Costs))
+//	surface = surface.WithPhaseSampler(inspect.Sampler(telemetry.Costs)).
+//	    WithMiddleware(inspect.Tracer[Env, Refusal](telemetry.Costs))
 //
 // The transports name their phases and cannot measure them -- they depend on
 // nothing that reads a counter -- so the naming is theirs and the measuring is
@@ -93,28 +93,28 @@ func Names(declarations []web.Declaration) []string {
 // one request at a time that is the phase; on a busy one it includes whatever
 // else was running, and the account says how many runs it is averaged over so
 // a reader can judge it.
-func Sampling(costs *process.Costs) web.Sampling {
+func Sampler(costs *process.Costs) web.PhaseSampler {
 	if costs == nil {
 		return nil
 	}
-	if !costs.Sizes() {
+	if !costs.KeepsSizes() {
 		return func(phase string) func() {
 			before := process.Read()
 			return func() {
-				costs.Record(phase, process.Between(before, process.Read()))
+				costs.Record(phase, process.Diff(before, process.Read()))
 			}
 		}
 	}
 	// The account keeps the sizes, so the histogram is sampled at both ends
 	// too. Two paths rather than one that always samples it, for the reason
-	// Costing has two: an account that does not keep the detail should not pay
+	// Track has two: an account that does not keep the detail should not pay
 	// to gather it.
 	return func(phase string) func() {
 		before, sizesBefore := process.Read(), process.ReadSizes()
 		return func() {
 			costs.RecordSpread(phase,
-				process.Between(before, process.Read()),
-				process.Spreading(sizesBefore, process.ReadSizes()))
+				process.Diff(before, process.Read()),
+				process.DiffSizes(sizesBefore, process.ReadSizes()))
 		}
 	}
 }

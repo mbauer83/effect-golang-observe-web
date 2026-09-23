@@ -17,26 +17,26 @@ var (
 	// ListNotes reads every note.
 	ListNotes = web.GET("/notes", web.Nothing(),
 		web.Returns(http.StatusOK, NotesSchema)).
-		Summary("List the notes")
+		WithSummary("List the notes")
 
 	// AddNote keeps one, identified by its title.
 	AddNote = web.POST("/notes", web.Entity(NoteSchema),
 		web.Returns(http.StatusCreated, NoteSchema)).
-		Summary("Add a note").
-		Failing(http.StatusConflict, "a note with that title is held already")
+		WithSummary("Add a note").
+		WithFailure(http.StatusConflict, "a note with that title is held already")
 
 	// Summarise is the route with something to decompose: four measured
 	// stages, one of which retries.
 	Summarise = web.GET("/notes/report", web.Nothing(),
 		web.Returns(http.StatusOK, ReportSchema)).
-		Summary("Summarise the notes in four measured stages")
+		WithSummary("Summarise the notes in four measured stages")
 
 	// FindNote reads one by title.
 	FindNote = web.GET("/notes/{title}",
-		web.PathParam("title", NoteTitle).Documented("the title to look for"),
+		web.PathParam("title", NoteTitle).WithDescription("the title to look for"),
 		web.Returns(http.StatusOK, NoteSchema)).
-		Summary("Find a note by title").
-		Failing(http.StatusNotFound, "no note with that title is held")
+		WithSummary("Find a note by title").
+		WithFailure(http.StatusNotFound, "no note with that title is held")
 )
 
 // Surface assembles the program's routes with the inspector's.
@@ -49,9 +49,9 @@ var (
 // this -- web.Handle, nothing else -- and the observation is one line further
 // down. That is the point: a program does not get written differently because
 // somebody wants to watch it.
-func Surface(store *Store, watched *inspect.Watched) (web.Routes[effect.Unit, Refusal], error) {
+func Surface(store *Store, telemetry *inspect.Telemetry) (web.Routes[effect.Unit, Refusal], error) {
 	mine := []web.Route[effect.Unit, Refusal]{
-		web.Handle(ListNotes, func(effect.Unit) storing[[]Note] { return store.All() }),
+		web.Handle(ListNotes, func(effect.Unit) task[[]Note] { return store.All() }),
 		web.Handle(AddNote, store.Add),
 		// Declared before FindNote, because /notes/report and
 		// /notes/{title} could both match a request for the first -- and a
@@ -59,20 +59,20 @@ func Surface(store *Store, watched *inspect.Watched) (web.Routes[effect.Unit, Re
 		// whatever the order. Stated in this order anyway, so a reader of the
 		// list is not left working that out.
 		web.Handle(Summarise,
-			func(effect.Unit) storing[Report] { return Reported(store, watched.Costs) }),
+			func(effect.Unit) task[Report] { return NewReport(store, telemetry.Costs) }),
 		web.Handle(FindNote, store.Find),
 	}
-	described, err := web.NewRoutes(mine...)
+	program, err := web.NewRoutes(mine...)
 	if err != nil {
 		return web.Routes[effect.Unit, Refusal]{}, err
 	}
-	watched.Surface = described.Declarations()
+	telemetry.Surface = program.Declarations()
 
-	inspecting, err := inspect.Routes[effect.Unit, Refusal](watched, inspect.DefaultAt)
+	inspector, err := inspect.Routes[effect.Unit, Refusal](telemetry, inspect.DefaultAt)
 	if err != nil {
 		return web.Routes[effect.Unit, Refusal]{}, err
 	}
-	assembled, err := web.NewRoutes(append(mine, inspecting...)...)
+	surface, err := web.NewRoutes(append(mine, inspector...)...)
 	if err != nil {
 		return web.Routes[effect.Unit, Refusal]{}, err
 	}
@@ -82,13 +82,13 @@ func Surface(store *Store, watched *inspect.Watched) (web.Routes[effect.Unit, Re
 	// The whole of the integration: one setting on the surface. Not applying
 	// it is how a program turns observation off, which a caller can decide
 	// from a flag without assembling anything differently.
-	// Measuring as well, so a trace shows decoding and encoding beside the
+	// The phase sampler as well, so a trace shows decoding and encoding beside the
 	// handler and each of them says what it allocated: a large document to
 	// unmarshal is real time, and one bar for all three could not say which
 	// of them a slow request spent it in.
-	return assembled.
-		Measuring(inspect.Sampling(watched.Costs)).
-		Wrapping(inspect.Observing[effect.Unit, Refusal](watched.Costs)), nil
+	return surface.
+		WithPhaseSampler(inspect.Sampler(telemetry.Costs)).
+		WithMiddleware(inspect.Tracer[effect.Unit, Refusal](telemetry.Costs)), nil
 }
 
 // Serve runs the surface on a listener until its scope closes.

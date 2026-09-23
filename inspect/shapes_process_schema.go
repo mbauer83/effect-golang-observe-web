@@ -13,7 +13,7 @@ var pointSchema = schema.Struct[Point]("Point",
 	schema.FieldOf("atMicros", schema.Int64(),
 		func(value Point) int64 { return value.AtMicros },
 		func(value *Point, field int64) { value.AtMicros = field }).
-		Documented("AtMicros is the offset from the first point, so a chart's axis needs no clock."),
+		WithDescription("AtMicros is the offset from the first point, so a chart's axis needs no clock."),
 	schema.FieldOf("heapBytes", schema.Int64(),
 		func(value Point) int64 { return value.HeapBytes },
 		func(value *Point, field int64) { value.HeapBytes = field }),
@@ -35,13 +35,13 @@ var pointSchema = schema.Struct[Point]("Point",
 	schema.FieldOf("busy", schema.Float64(),
 		func(value Point) float64 { return value.Busy },
 		func(value *Point, field float64) { value.Busy = field }),
-).Documented("Point is one reading on a chart.")
+).WithDescription("Point is one reading on a chart.")
 
 var processSchema = schema.Struct[Process]("Process",
 	schema.FieldOf("sampled", schema.Bool(),
 		func(value Process) bool { return value.Sampled },
 		func(value *Process, field bool) { value.Sampled = field }).
-		Documented("Sampled says a reading was taken; without a series there is nothing to report and two zeroes would read as a program using nothing."),
+		WithDescription("Sampled says a reading was taken; without a series there is nothing to report and two zeroes would read as a program using nothing."),
 	schema.FieldOf("heapBytes", schema.Int64(),
 		func(value Process) int64 { return value.HeapBytes },
 		func(value *Process, field int64) { value.HeapBytes = field }),
@@ -54,7 +54,7 @@ var processSchema = schema.Struct[Process]("Process",
 	schema.FieldOf("goalBytes", schema.Int64(),
 		func(value Process) int64 { return value.GoalBytes },
 		func(value *Process, field int64) { value.GoalBytes = field }).
-		Documented("GoalBytes is the heap size the next collection is aiming at."),
+		WithDescription("GoalBytes is the heap size the next collection is aiming at."),
 	schema.FieldOf("stackBytes", schema.Int64(),
 		func(value Process) int64 { return value.StackBytes },
 		func(value *Process, field int64) { value.StackBytes = field }),
@@ -70,7 +70,7 @@ var processSchema = schema.Struct[Process]("Process",
 	schema.FieldOf("runnable", schema.Int64(),
 		func(value Process) int64 { return value.Runnable },
 		func(value *Process, field int64) { value.Runnable = field }).
-		Documented("Runnable is ready and not running: a goroutine waiting for a thread rather than for work."),
+		WithDescription("Runnable is ready and not running: a goroutine waiting for a thread rather than for work."),
 	schema.FieldOf("waiting", schema.Int64(),
 		func(value Process) int64 { return value.Waiting },
 		func(value *Process, field int64) { value.Waiting = field }),
@@ -92,15 +92,15 @@ var processSchema = schema.Struct[Process]("Process",
 	schema.FieldOf("busy", schema.Float64(),
 		func(value Process) float64 { return value.Busy },
 		func(value *Process, field float64) { value.Busy = field }).
-		Documented("Busy is the share of the available CPU the process used, measured against the threads it was allowed."),
+		WithDescription("Busy is the share of the available CPU the process used, measured against the threads it was allowed."),
 	schema.FieldOf("collecting", schema.Float64(),
-		func(value Process) float64 { return value.Collecting },
-		func(value *Process, field float64) { value.Collecting = field }).
-		Documented("Collecting is the share of the CPU it used that the collector took."),
+		func(value Process) float64 { return value.GCShare },
+		func(value *Process, field float64) { value.GCShare = field }).
+		WithDescription("Collecting is the share of the CPU it used that the collector took."),
 	schema.FieldOf("points", schema.List(pointSchema),
 		func(value Process) []Point { return value.Points },
 		func(value *Process, field []Point) { value.Points = field }),
-).Documented("Process is what the program is spending, process-wide.")
+).WithDescription("Process is what the program is spending, process-wide.")
 
 var costSchema = schema.Struct[Cost]("Cost",
 	schema.FieldOf("name", schema.Text(),
@@ -112,14 +112,14 @@ var costSchema = schema.Struct[Cost]("Cost",
 	schema.FieldOf("allocatedDuring", schema.Int64(),
 		func(value Cost) int64 { return value.AllocatedDuring },
 		func(value *Cost, field int64) { value.AllocatedDuring = field }).
-		Documented("AllocatedDuring is what the process allocated while the work ran, which on a busy program includes whatever else ran."),
+		WithDescription("AllocatedDuring is what the process allocated while the work ran, which on a busy program includes whatever else ran."),
 	schema.FieldOf("perRunBytes", schema.Int64(),
 		func(value Cost) int64 { return value.PerRunBytes },
 		func(value *Cost, field int64) { value.PerRunBytes = field }),
 	schema.FieldOf("allocatedP50Bytes", schema.Int64(),
 		func(value Cost) int64 { return value.AllocatedP50Bytes },
 		func(value *Cost, field int64) { value.AllocatedP50Bytes = field }).
-		Documented("AllocatedP50Bytes is what a typical run of this name allocated: a measurement that happened, read from the runs the account kept."),
+		WithDescription("AllocatedP50Bytes is what a typical run of this name allocated: a measurement that happened, read from the runs the account kept."),
 	schema.FieldOf("allocatedP95Bytes", schema.Int64(),
 		func(value Cost) int64 { return value.AllocatedP95Bytes },
 		func(value *Cost, field int64) { value.AllocatedP95Bytes = field }),
@@ -130,20 +130,20 @@ var costSchema = schema.Struct[Cost]("Cost",
 		func(value Cost) int64 { return value.ObjectsP95 },
 		func(value *Cost, field int64) { value.ObjectsP95 = field }),
 	schema.FieldOf("keptRuns", schema.Int64(),
-		func(value Cost) int64 { return value.KeptRuns },
-		func(value *Cost, field int64) { value.KeptRuns = field }).
-		Documented("KeptRuns is how many runs the quantiles are drawn from: a ninety-ninth percentile over three runs is a sentence with no content."),
+		func(value Cost) int64 { return value.SampleSize },
+		func(value *Cost, field int64) { value.SampleSize = field }).
+		WithDescription("KeptRuns is how many runs the quantiles are drawn from: a ninety-ninth percentile over three runs is a sentence with no content."),
 	schema.FieldOf("objectsPerRun", schema.Int64(),
 		func(value Cost) int64 { return value.ObjectsPerRun },
 		func(value *Cost, field int64) { value.ObjectsPerRun = field }).
-		Documented("ObjectsPerRun is how many allocations a run made, which in Go is usually more actionable than their weight."),
+		WithDescription("ObjectsPerRun is how many allocations a run made, which in Go is usually more actionable than their weight."),
 	schema.FieldOf("meanObjectBytes", schema.Int64(),
 		func(value Cost) int64 { return value.MeanObjectBytes },
 		func(value *Cost, field int64) { value.MeanObjectBytes = field }),
 	schema.FieldOf("sizes", schema.List(sizeClassSchema),
 		func(value Cost) []SizeClass { return value.Sizes },
 		func(value *Cost, field []SizeClass) { value.Sizes = field }).
-		Documented("Sizes are the size classes the allocations fell into, smallest first, or empty when the account was not told to keep them."),
+		WithDescription("Sizes are the size classes the allocations fell into, smallest first, or empty when the account was not told to keep them."),
 	schema.FieldOf("cpuSecondsDuring", schema.Float64(),
 		func(value Cost) float64 { return value.CPUSecondsDuring },
 		func(value *Cost, field float64) { value.CPUSecondsDuring = field }),
@@ -156,14 +156,14 @@ var costSchema = schema.Struct[Cost]("Cost",
 	schema.FieldOf("runs", schema.List(runSchema),
 		func(value Cost) []Run { return value.Runs },
 		func(value *Cost, field []Run) { value.Runs = field }).
-		Documented("Runs are the recent runs of this name, newest first: what one span did, where the figures beside them are what the name costs on average."),
-).Documented("Cost is what the process spent while one name's work ran.")
+		WithDescription("Runs are the recent runs of this name, newest first: what one span did, where the figures beside them are what the name costs on average."),
+).WithDescription("Cost is what the process spent while one name's work ran.")
 
 var runSchema = schema.Struct[Run]("Run",
 	schema.FieldOf("endedMicros", schema.Int64(),
-		func(value Run) int64 { return value.EndedMicros },
-		func(value *Run, field int64) { value.EndedMicros = field }).
-		Documented("EndedMicros is the offset from the earliest span in this reading, so a run can be matched to the span whose window it ended in."),
+		func(value Run) int64 { return value.EndMicros },
+		func(value *Run, field int64) { value.EndMicros = field }).
+		WithDescription("EndedMicros is the offset from the earliest span in this reading, so a run can be matched to the span whose window it ended in."),
 	schema.FieldOf("micros", schema.Int64(),
 		func(value Run) int64 { return value.Micros },
 		func(value *Run, field int64) { value.Micros = field }),
@@ -173,14 +173,14 @@ var runSchema = schema.Struct[Run]("Run",
 	schema.FieldOf("objects", schema.Int64(),
 		func(value Run) int64 { return value.Objects },
 		func(value *Run, field int64) { value.Objects = field }),
-).Documented("Run is one run of a name: when its window ended, and what the process did during it.")
+).WithDescription("Run is one run of a name: when its window ended, and what the process did during it.")
 
 var sizeClassSchema = schema.Struct[SizeClass]("SizeClass",
 	schema.FieldOf("atMostBytes", schema.Int64(),
 		func(value SizeClass) int64 { return value.AtMostBytes },
 		func(value *SizeClass, field int64) { value.AtMostBytes = field }).
-		Documented("AtMostBytes is the class's upper edge, and zero for the widest class, which has none."),
+		WithDescription("AtMostBytes is the class's upper edge, and zero for the widest class, which has none."),
 	schema.FieldOf("count", schema.Int64(),
 		func(value SizeClass) int64 { return value.Count },
 		func(value *SizeClass, field int64) { value.Count = field }),
-).Documented("SizeClass is one of Go's allocation size classes.")
+).WithDescription("SizeClass is one of Go's allocation size classes.")

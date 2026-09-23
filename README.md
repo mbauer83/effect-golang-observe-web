@@ -25,7 +25,7 @@ built on it would be a tool nobody had tried the stack with.
 | Area | State |
 |---|---|
 | [The inspector: page, snapshot, contract](docs/reference/inspect.md) | usable |
-| [Naming requests: `Observing`, `Sampling`, `Names`](docs/reference/inspect.md) | usable; settings on the surface, nothing at the call sites |
+| [Naming requests: `Tracer`, `Sampler`, `Names`](docs/reference/inspect.md) | usable; settings on the surface, nothing at the call sites |
 | [Memory and compute: gauges, charts, cost per name, per-run figures](docs/reference/inspect.md) | usable; process-wide, because Go reports no per-goroutine allocation or CPU |
 | [The page: timeline, hot paths, fibers, spans, surface](docs/reference/inspect.md) | usable; charts by vendored uPlot, served from the inspector |
 | Push protocol to an out-of-process tool | absent, and [deliberately](docs/reference/inspect.md) |
@@ -33,12 +33,12 @@ built on it would be a tool nobody had tried the stack with.
 ## The shortest useful thing
 
 ```go
-watched := inspect.Watched{
-    Running:   trace.Watch(),
-    Fibers:    trace.WatchFibers(),
+telemetry := inspect.Telemetry{
+    Spans:     trace.NewSpans(),
+    Fibers:    trace.NewFibers(),
     Window:    window,
-    Collected: metrics.Collect(metrics.Naming(inspect.Names(declarations)...)),
-    Owned:     runtime.LiveWork,
+    Collector: metrics.NewCollector(metrics.NewVocabulary(inspect.Names(declarations)...)),
+    LiveWork:  runtime.LiveWork,
 }
 
 // The routes, written exactly as they would be without any of this.
@@ -47,16 +47,16 @@ mine := []web.Route[effect.Unit, Refusal]{
     web.Handle(AddNote, add),
 }
 described, _ := web.NewRoutes(mine...)
-watched.Surface = described.Declarations
+telemetry.Surface = described.Declarations()
 
-inspecting, _ := inspect.Routes[effect.Unit, Refusal](watched, inspect.DefaultAt)
-surface, _ := web.NewRoutes(append(mine, inspecting...)...)
+inspector, _ := inspect.Routes[effect.Unit, Refusal](&telemetry, inspect.DefaultAt)
+surface, _ := web.NewRoutes(append(mine, inspector...)...)
 
 // Settings on the surface. Not applying them is how a program turns
 // observation off.
 surface = surface.
-	Measuring(inspect.Sampling(watched.Costs)).
-	Wrapping(inspect.Observing[effect.Unit, Refusal](watched.Costs))
+	WithPhaseSampler(inspect.Sampler(telemetry.Costs)).
+	WithMiddleware(inspect.Tracer[effect.Unit, Refusal](telemetry.Costs))
 ```
 
 One surface, so one matcher dispatches everything: the inspector is not a

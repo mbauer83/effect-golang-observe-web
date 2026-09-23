@@ -25,51 +25,51 @@ import (
 	"github.com/mbauer83/effect-golang/effect"
 )
 
-// inspecting starts the example program with the inspector mounted and returns
+// serveExample starts the example program with the inspector mounted and returns
 // a client for it. It stops when the test ends.
-func inspecting(t *testing.T) *web.Client {
+func serveExample(t *testing.T) *web.Client {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	window, err := observe.Keep(256)
+	window, err := observe.NewRecent(256)
 	if err != nil {
 		t.Fatal(err)
 	}
-	series, err := process.Keep(8)
+	series, err := process.NewSeries(8)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The route names and the report's stage names: the vocabulary the
 	// aggregate and the account are both bounded by.
-	named := append(inspect.Names(declared()), inspected.Stages...)
-	watched := &inspect.Watched{
-		Running:   trace.Watch(),
-		Fibers:    trace.WatchFibers(),
+	names := append(inspect.Names(declarations()), inspected.Stages...)
+	telemetry := &inspect.Telemetry{
+		Spans:     trace.NewSpans(),
+		Fibers:    trace.NewFibers(),
 		Window:    window,
-		Collected: metrics.Collect(metrics.Naming(named...)),
+		Collector: metrics.NewCollector(metrics.NewVocabulary(names...)),
 		Series:    series,
-		Costs:     process.Accounting(named...),
+		Costs:     process.NewCosts(names...),
 	}
 	runtime, err := effect.NewRuntime(
 		// Unbuffered on purpose: a test that had to wait for a queue to drain
 		// would be a test of the queue.
 		effect.WithObserver(observe.Fanout(
-			watched.Running, watched.Fibers, watched.Collected, watched.Window)),
+			telemetry.Spans, telemetry.Fibers, telemetry.Collector, telemetry.Window)),
 		effect.WithDebugTracking(),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	watched.Owned = runtime.LiveWork
+	telemetry.LiveWork = runtime.LiveWork
 
 	store, built := runtime.Run(context.Background(), effect.Unit{},
 		inspected.NewStore(inspected.Note{Title: "First", Body: "a note"})).Value()
 	if !built {
 		t.Fatal("the store could not be built")
 	}
-	surface, err := inspected.Surface(store, watched)
+	surface, err := inspected.Surface(store, telemetry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,11 +78,11 @@ func inspecting(t *testing.T) *web.Client {
 		t.Fatal(err)
 	}
 
-	serving, stop := context.WithCancel(context.Background())
+	ctx, stop := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		runtime.Run(serving, effect.Unit{}, inspected.Serve(listener, boundary, surface))
+		runtime.Run(ctx, effect.Unit{}, inspected.Serve(listener, boundary, surface))
 	}()
 	t.Cleanup(func() {
 		stop()
@@ -95,7 +95,7 @@ func inspecting(t *testing.T) *web.Client {
 	return web.Dial(http.DefaultClient, "http://"+listener.Addr().String())
 }
 
-func declared() []web.Declaration {
+func declarations() []web.Declaration {
 	return []web.Declaration{
 		inspected.ListNotes.Declaration(),
 		inspected.AddNote.Declaration(),
@@ -104,53 +104,53 @@ func declared() []web.Declaration {
 	}
 }
 
-// fetched calls one path and reads the whole response.
-func fetched(t *testing.T, client *web.Client, method string, path string) web.Received {
+// fetch calls one path and reads the whole response.
+func fetch(t *testing.T, client *web.Client, method string, path string) web.ClientResponse {
 	t.Helper()
 	exit := effect.Run(context.Background(), effect.Unit{},
-		web.Fetch[effect.Unit](client, method, path, web.Requesting{}))
-	received, ok := exit.Value()
+		web.Fetch[effect.Unit](client, method, path, web.ClientRequest{}))
+	response, ok := exit.Value()
 	if !ok {
 		cause, _ := exit.Cause()
 		t.Fatalf("calling %s %s: %v", method, path, cause)
 	}
-	return received
+	return response
 }
 
-// taken reads the inspector's snapshot through its own description.
-func taken(t *testing.T, client *web.Client) inspect.Snapshot {
+// readSnapshot reads the inspector's snapshot through its own description.
+func readSnapshot(t *testing.T, client *web.Client) inspect.Snapshot {
 	t.Helper()
-	received := fetched(t, client, http.MethodGet, inspect.DefaultAt+"/snapshot")
-	if received.Status != http.StatusOK {
-		t.Fatalf("the inspector answered %d", received.Status)
+	response := fetch(t, client, http.MethodGet, inspect.DefaultAt+"/snapshot")
+	if response.Status != http.StatusOK {
+		t.Fatalf("the inspector answered %d", response.Status)
 	}
-	read, err := inspect.Read(received.Entity)
+	snapshot, err := inspect.Read(response.Entity)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return read
+	return snapshot
 }
 
 func TestEveryRequestBecomesASpanNamedForItsRoutePattern(t *testing.T) {
-	client := inspecting(t)
-	fetched(t, client, http.MethodGet, "/notes")
-	fetched(t, client, http.MethodGet, "/notes/First")
-	fetched(t, client, http.MethodGet, "/notes/Missing")
+	client := serveExample(t)
+	fetch(t, client, http.MethodGet, "/notes")
+	fetch(t, client, http.MethodGet, "/notes/First")
+	fetch(t, client, http.MethodGet, "/notes/Missing")
 
-	read := taken(t, client)
-	named := map[string]int{}
-	for _, span := range read.Trace {
-		named[span.Name]++
+	snapshot := readSnapshot(t, client)
+	counts := map[string]int{}
+	for _, span := range snapshot.Trace {
+		counts[span.Name]++
 	}
 	// The pattern and never the path: a series per title would be a series
 	// per request, which is the failure metrics exists to avoid.
-	if named["GET /notes/{title}"] != 2 {
-		t.Fatalf("expected both title requests under one name, got %v", named)
+	if counts["GET /notes/{title}"] != 2 {
+		t.Fatalf("expected both title requests under one name, got %v", counts)
 	}
-	if named["GET /notes"] != 1 {
-		t.Fatalf("expected the listing named for its route, got %v", named)
+	if counts["GET /notes"] != 1 {
+		t.Fatalf("expected the listing named for its route, got %v", counts)
 	}
-	for name := range named {
+	for name := range counts {
 		if strings.Contains(name, "First") || strings.Contains(name, "Missing") {
 			t.Fatalf("a concrete path became a span name: %q", name)
 		}
@@ -158,17 +158,17 @@ func TestEveryRequestBecomesASpanNamedForItsRoutePattern(t *testing.T) {
 	// The one that refused is visible as such, which is the question a trace
 	// gets opened for -- and with the phases named, the failure is on the
 	// route and on the phase it came out of rather than on the route alone.
-	failed := map[string]int{}
-	for _, span := range read.Trace {
+	failures := map[string]int{}
+	for _, span := range snapshot.Trace {
 		if span.Status == string(effect.EventStatusFailure) {
-			failed[span.Name]++
+			failures[span.Name]++
 		}
 	}
-	if failed["GET /notes/{title}"] != 1 {
-		t.Fatalf("expected the refused request's route to show as failed, got %v", failed)
+	if failures["GET /notes/{title}"] != 1 {
+		t.Fatalf("expected the refused request's route to show as failed, got %v", failures)
 	}
-	if failed["handling"] != 1 {
-		t.Fatalf("expected the failure attributed to the handling phase, got %v", failed)
+	if failures["handling"] != 1 {
+		t.Fatalf("expected the failure attributed to the handling phase, got %v", failures)
 	}
 }
 
@@ -180,10 +180,10 @@ func TestTheSurfaceBeingServedReachesTheWire(t *testing.T) {
 	// Which routes those are is the program's choice -- the example reports
 	// its own and not the inspector's -- and the inspector reports whatever it
 	// is given, which the unit suite states directly.
-	read := taken(t, inspecting(t))
+	snapshot := readSnapshot(t, serveExample(t))
 
 	found := map[string]Route{}
-	for _, route := range read.Routes {
+	for _, route := range snapshot.Routes {
 		found[route.Method+" "+route.Path] = route
 	}
 	listing, present := found["GET /notes"]

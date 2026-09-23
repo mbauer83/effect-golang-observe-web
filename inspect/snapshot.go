@@ -15,16 +15,16 @@ import (
 	"github.com/mbauer83/effect-golang/effect"
 )
 
-// Watched is what an inspector reads.
+// Telemetry is what an inspector reads.
 //
 // Named parts rather than an interface, because there is nothing to abstract
 // over: these are the values observe produces and the declarations a
-// web.Routes already carries. Assemble them with Watching, or by hand when a
-// program wants an arrangement Watching does not offer.
+// web.Routes already carries. Assemble them with NewTelemetry, or by hand when a
+// program wants an arrangement NewTelemetry does not offer.
 //
 // A handle and not a value: every field in it is already a live pointer to
 // something a running program is writing to, so it is passed and held as
-// *Watched throughout. That is not a style preference -- when it was passed
+// *Telemetry throughout. That is not a style preference -- when it was passed
 // by value, assigning a field after handing it to Routes assigned it to a
 // copy the inspector had already taken, which is a mistake that compiles,
 // runs, and shows an empty panel.
@@ -32,30 +32,30 @@ import (
 // Every field is optional. An inspector with no collector shows no
 // measurements rather than refusing to start, because a program that only
 // wants to see its spans should not have to aggregate to get them.
-type Watched struct {
-	// Running is the live span tracker: what is open at this instant.
-	Running *trace.Running
+type Telemetry struct {
+	// Spans is the live span tracker: what is open at this instant.
+	Spans *trace.Spans
 	// Window is the recent events, folded into a trace on each reading.
 	Window *observe.Recent
-	// Collected is the bounded aggregate.
-	Collected *metrics.Collector
+	// Collector is the bounded aggregate.
+	Collector *metrics.Collector
 	// Fibers is the live fiber tracker: the execution structure beside the
 	// logical one, and the one a program that has stopped responding is found
 	// through.
 	Fibers *trace.Fibers
-	// Queued is the buffering observer, read only for how much it discarded.
-	Queued *observe.Buffered
-	// Owned counts what the runtime still holds. A method rather than the
+	// Buffer is the buffering observer, read only for how much it discarded.
+	Buffer *observe.Buffer
+	// LiveWork counts what the runtime still holds. A method rather than the
 	// runtime itself, so an inspector can be given the counts without being
 	// given the thing that can close the program it is watching.
-	Owned func() effect.LiveWork
+	LiveWork func() effect.LiveWork
 	// Series is the process's memory and compute over time. A reading is
 	// taken when a snapshot is, so the resolution of a chart is the rate the
 	// inspector is being looked at -- and a program nobody is watching pays
 	// nothing.
 	Series *process.Series
 	// Costs is what the process spent while each route's work ran, which
-	// inspect.Accounted records.
+	// inspect.Tracer records.
 	Costs *process.Costs
 	// Surface names the routes being served, which is what a runtime-level
 	// tool cannot know.
@@ -74,8 +74,8 @@ type Watched struct {
 // snapshot is therefore nearly consistent rather than consistent, which is
 // what any tool reading a running program gets and is worth saying rather
 // than implying.
-func (watched *Watched) Take(now time.Time) Snapshot {
-	taken := Snapshot{
+func (telemetry *Telemetry) Take(now time.Time) Snapshot {
+	snapshot := Snapshot{
 		TakenAt:      now.UTC().Format(time.RFC3339Nano),
 		Fibers:       []Fiber{},
 		OpenSpans:    []Span{},
@@ -84,46 +84,46 @@ func (watched *Watched) Take(now time.Time) Snapshot {
 		Routes:       []Route{},
 		Costs:        []Cost{},
 	}
-	if len(watched.Surface) > 0 {
-		taken.Routes = routesOf(watched.Surface)
+	if len(telemetry.Surface) > 0 {
+		snapshot.Routes = routesOf(telemetry.Surface)
 	}
-	if watched.Running != nil {
-		taken.OpenSpans = flatten(watched.Running.Open(), now)
+	if telemetry.Spans != nil {
+		snapshot.OpenSpans = flatten(telemetry.Spans.Open(), now)
 	}
-	if watched.Fibers != nil {
-		taken.Fibers = flattenFibers(watched.Fibers.Running(), now)
+	if telemetry.Fibers != nil {
+		snapshot.Fibers = flattenFibers(telemetry.Fibers.Tree(), now)
 	}
-	if watched.Owned != nil {
-		held := watched.Owned()
-		taken.Owned = Owned{
+	if telemetry.LiveWork != nil {
+		work := telemetry.LiveWork()
+		snapshot.LiveWork = LiveWork{
 			Counted:   true,
-			Fibers:    int64(held.Fibers),
-			Resources: int64(held.Resources),
+			Fibers:    int64(work.Fibers),
+			Resources: int64(work.Resources),
 		}
 	}
-	if watched.Series != nil {
-		taken.Process = sampled(watched.Series)
+	if telemetry.Series != nil {
+		snapshot.Process = sampleProcess(telemetry.Series)
 	}
 	// The window before the accounts, because both are placed on one timeline
 	// and the spans decide where it starts: a run's window is only
 	// attributable to a span if the two are measured from the same origin.
 	origin := time.Time{}
-	if watched.Window != nil {
-		assembled := trace.Assemble(watched.Window.Events())
-		origin = earliest(assembled.Spans())
-		taken.Trace = flattenTree(assembled, now, origin)
-		taken.LooseEvents = int64(len(assembled.Loose))
+	if telemetry.Window != nil {
+		tree := trace.Assemble(telemetry.Window.Events())
+		origin = earliest(tree.Spans())
+		snapshot.Trace = flattenTree(tree, now, origin)
+		snapshot.LooseEvents = int64(len(tree.Loose))
 	}
-	if watched.Costs != nil {
-		taken.Costs = costsOf(watched.Costs.Snapshot(), origin)
+	if telemetry.Costs != nil {
+		snapshot.Costs = costsOf(telemetry.Costs.Snapshot(), origin)
 	}
-	if watched.Collected != nil {
-		taken.Measurements = measurementsOf(watched.Collected.Snapshot())
+	if telemetry.Collector != nil {
+		snapshot.Measurements = measurementsOf(telemetry.Collector.Snapshot())
 	}
-	if watched.Queued != nil {
-		taken.Dropped = int64(watched.Queued.Dropped())
+	if telemetry.Buffer != nil {
+		snapshot.DroppedEvents = int64(telemetry.Buffer.Drops())
 	}
-	return taken
+	return snapshot
 }
 
 // Read decodes a snapshot through the description it was written with.
@@ -134,11 +134,11 @@ func (watched *Watched) Take(now time.Time) Snapshot {
 // render. The description is published at the inspector's own OpenAPI
 // endpoint, so the two cannot drift.
 func Read(entity []byte) (Snapshot, error) {
-	taken, err := schema.DecodeJSON(SnapshotSchema, entity)
+	snapshot, err := schema.DecodeJSON(SnapshotSchema, entity)
 	if err != nil {
-		return Snapshot{}, Fault{Doing: "reading a snapshot", Err: err}
+		return Snapshot{}, Fault{Op: "reading a snapshot", Err: err}
 	}
-	return taken, nil
+	return snapshot, nil
 }
 
 // Write encodes a snapshot through the description it is published under.
@@ -146,10 +146,10 @@ func Read(entity []byte) (Snapshot, error) {
 // The counterpart of Read, and what the snapshot endpoint hands over. It is
 // public for the same reason: a test that asserts on what a page will render
 // should encode what the inspector encodes, not something that resembles it.
-func Write(taken Snapshot) ([]byte, error) {
-	written, err := schema.EncodeJSON(SnapshotSchema, taken)
+func Write(snapshot Snapshot) ([]byte, error) {
+	entity, err := schema.EncodeJSON(SnapshotSchema, snapshot)
 	if err != nil {
-		return nil, Fault{Doing: "writing a snapshot", Err: err}
+		return nil, Fault{Op: "writing a snapshot", Err: err}
 	}
-	return written, nil
+	return entity, nil
 }

@@ -21,22 +21,22 @@ import (
 // exercise sends the traffic the inspector then has something to show about.
 func exercise(base string) {
 	client := web.Dial(http.DefaultClient, base)
-	for _, sending := range traffic() {
-		if _, err := called(client, sending); err != nil {
-			fmt.Printf("  %s: %v\n", sending.what, err)
+	for _, one := range traffic() {
+		if _, err := send(client, one); err != nil {
+			fmt.Printf("  %s: %v\n", one.what, err)
 		}
 	}
 }
 
-type sending struct {
+type request struct {
 	what   string
 	method string
 	path   string
 	body   []byte
 }
 
-func traffic() []sending {
-	return []sending{
+func traffic() []request {
+	return []request{
 		{what: "list", method: http.MethodGet, path: "/notes"},
 		{what: "add", method: http.MethodPost, path: "/notes",
 			body: []byte(`{"title":"Second","body":"another"}`)},
@@ -48,19 +48,19 @@ func traffic() []sending {
 	}
 }
 
-func called(client *web.Client, one sending) (web.Received, error) {
-	requesting := web.Requesting{Entity: one.body}
+func send(client *web.Client, one request) (web.ClientResponse, error) {
+	options := web.ClientRequest{Entity: one.body}
 	if len(one.body) > 0 {
-		requesting.MediaType = "application/json"
+		options.MediaType = "application/json"
 	}
 	exit := effect.Run(context.Background(), effect.Unit{},
-		web.Fetch[effect.Unit](client, one.method, one.path, requesting))
-	received, ok := exit.Value()
+		web.Fetch[effect.Unit](client, one.method, one.path, options))
+	response, ok := exit.Value()
 	if !ok {
 		cause, _ := exit.Cause()
-		return web.Received{}, errors.New(cause.String())
+		return web.ClientResponse{}, errors.New(cause.String())
 	}
-	return received, nil
+	return response, nil
 }
 
 // report reads the inspector's own snapshot, through the client, and prints
@@ -71,54 +71,54 @@ func called(client *web.Client, one sending) (web.Received, error) {
 // the page shows on its first refresh too.
 func report(base string) {
 	client := web.Dial(http.DefaultClient, base)
-	if _, err := called(client, sending{
+	if _, err := send(client, request{
 		method: http.MethodGet, path: inspect.DefaultAt + "/snapshot",
 	}); err != nil {
 		fail(err)
 	}
 	time.Sleep(300 * time.Millisecond)
-	received, err := called(client, sending{
+	response, err := send(client, request{
 		method: http.MethodGet, path: inspect.DefaultAt + "/snapshot",
 	})
 	if err != nil {
 		fail(err)
 	}
-	taken, err := inspect.Read(received.Entity)
+	snapshot, err := inspect.Read(response.Entity)
 	if err != nil {
 		fail(err)
 	}
 
-	fmt.Printf("\nthe inspector, read at %s\n", taken.TakenAt)
+	fmt.Printf("\nthe inspector, read at %s\n", snapshot.TakenAt)
 	fmt.Printf("  the runtime owns %d fiber(s) and %d resource(s)\n",
-		taken.Owned.Fibers, taken.Owned.Resources)
+		snapshot.LiveWork.Fibers, snapshot.LiveWork.Resources)
 	fmt.Printf("  %d span(s) in the window, %d event(s) outside every span\n",
-		len(taken.Trace), taken.LooseEvents)
-	for _, span := range taken.Trace {
+		len(snapshot.Trace), snapshot.LooseEvents)
+	for _, span := range snapshot.Trace {
 		fmt.Printf("  %s%-28s +%-10s %-10s %s\n",
 			indent(span.Depth), span.Name,
 			offset(span.StartMicros), micros(span.Micros), span.Status)
 	}
 	fmt.Println("\n  what was served")
-	for _, route := range taken.Routes {
+	for _, route := range snapshot.Routes {
 		fmt.Printf("    %-6s %-18s answers %d  %s\n",
 			route.Method, route.Path, route.Status, route.Summary)
 	}
 	fmt.Printf("\n  the process, %s into the window\n",
-		micros(taken.Process.OverMicros))
+		micros(snapshot.Process.OverMicros))
 	fmt.Printf("    heap %s of a %s goal, %d objects, stacks %s\n",
-		bytes(taken.Process.HeapBytes), bytes(taken.Process.GoalBytes),
-		taken.Process.HeapObjects, bytes(taken.Process.StackBytes))
+		bytes(snapshot.Process.HeapBytes), bytes(snapshot.Process.GoalBytes),
+		snapshot.Process.HeapObjects, bytes(snapshot.Process.StackBytes))
 	fmt.Printf("    %d goroutine(s) on %d thread(s): %d running, %d runnable, %d waiting\n",
-		taken.Process.Goroutines, taken.Process.Threads,
-		taken.Process.Running, taken.Process.Runnable, taken.Process.Waiting)
+		snapshot.Process.Goroutines, snapshot.Process.Threads,
+		snapshot.Process.Running, snapshot.Process.Runnable, snapshot.Process.Waiting)
 	fmt.Printf("    allocated %s at %s/s, %.1f%% busy, %.1f%% of that collecting\n",
-		bytes(taken.Process.AllocatedBytes), bytes(int64(taken.Process.BytesPerSecond)),
-		100*taken.Process.Busy, 100*taken.Process.Collecting)
+		bytes(snapshot.Process.AllocatedBytes), bytes(int64(snapshot.Process.BytesPerSecond)),
+		100*snapshot.Process.Busy, 100*snapshot.Process.GCShare)
 
-	if len(taken.Costs) > 0 {
+	if len(snapshot.Costs) > 0 {
 		fmt.Println("\n  what the process spent while each route ran")
 		fmt.Println("    (process-wide over each request's window, so concurrent work is in it too)")
-		for _, cost := range taken.Costs {
+		for _, cost := range snapshot.Costs {
 			fmt.Printf("    %-24s x%-3d %8s per run, longest %s\n",
 				cost.Name, cost.Times, bytes(cost.PerRunBytes),
 				micros(cost.LongestMicros))
@@ -126,22 +126,22 @@ func report(base string) {
 	}
 
 	fmt.Println("\n  what it measured, per route")
-	for _, measured := range taken.Measurements {
-		if measured.Kind != "span_ended" {
+	for _, measurement := range snapshot.Measurements {
+		if measurement.Kind != "span_ended" {
 			continue
 		}
 		fmt.Printf("    %-24s %-14s x%d  median at most %s\n",
-			measured.Operation, measured.Status, measured.Count,
-			micros(measured.MedianMicros))
+			measurement.Operation, measurement.Status, measurement.Count,
+			micros(measurement.MedianMicros))
 	}
 }
 
 func indent(depth int64) string {
-	written := ""
+	result := ""
 	for range depth {
-		written += "  "
+		result += "  "
 	}
-	return written
+	return result
 }
 
 // micros renders a measurement, where zero means there was none.

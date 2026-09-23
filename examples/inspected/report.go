@@ -39,7 +39,7 @@ var ReportSchema = schema.Struct[Report]("Report",
 	schema.FieldOf("digest", schema.Text(),
 		func(value Report) string { return value.Digest },
 		func(value *Report, field string) { value.Digest = field }),
-).Documented("Report is a summary of the notes.")
+).WithDescription("Report is a summary of the notes.")
 
 // Stages are the names the report's parts are measured under.
 //
@@ -48,30 +48,30 @@ var ReportSchema = schema.Struct[Report]("Report",
 // should be able to tell apart.
 var Stages = []string{"read", "count", "digest", "rank"}
 
-// Reported summarises the notes in four measured stages.
+// NewReport summarises the notes in four measured stages.
 //
-// Each stage is one Measured: a span, a name and an account under one word.
+// Each stage is one Measure: a span, a name and an account under one word.
 // The costs differ on purpose -- digest allocates, count does not -- so the
 // inspector's cost panel has something to rank and the hot stage is visibly
 // not the slowest one.
-func Reported(store *Store, costs *process.Costs) storing[Report] {
+func NewReport(store *Store, costs *process.Costs) task[Report] {
 	return effect.Gen(func(do *effect.Do[effect.Unit, Refusal]) Report {
-		held := do.Await(process.Measured(costs, "read", store.All()))
-		counted := do.Await(process.Measured(costs, "count", counting(held)))
-		digest := do.Await(process.Measured(costs, "digest", digesting(held)))
-		longest := do.Await(process.Measured(costs, "rank", ranking(held)))
+		notes := do.Await(process.Measure(costs, "read", store.All()))
+		words := do.Await(process.Measure(costs, "count", countWords(notes)))
+		digest := do.Await(process.Measure(costs, "digest", digestNotes(notes)))
+		longest := do.Await(process.Measure(costs, "rank", rankTitles(notes)))
 		return Report{
-			Notes:   len(held),
-			Words:   counted,
+			Notes:   len(notes),
+			Words:   words,
 			Longest: longest,
 			Digest:  digest,
 		}
 	})
 }
 
-// counting walks the notes and allocates nothing worth measuring, which is
+// countWords walks the notes and allocates nothing worth measuring, which is
 // what makes it the cheap stage.
-func counting(notes []Note) storing[int] {
+func countWords(notes []Note) task[int] {
 	return effect.From(func(context.Context, effect.Unit) effect.Exit[Refusal, int] {
 		words := 0
 		for _, note := range notes {
@@ -81,21 +81,21 @@ func counting(notes []Note) storing[int] {
 	})
 }
 
-// digesting builds a string per note and throws most of it away, which is the
+// digestNotes builds a string per note and throws most of it away, which is the
 // shape of a great deal of real work and the reason a cost panel is worth
 // having: it is not the slowest stage and it is the one allocating.
-func digesting(notes []Note) storing[string] {
+func digestNotes(notes []Note) task[string] {
 	return effect.From(func(context.Context, effect.Unit) effect.Exit[Refusal, string] {
-		var built strings.Builder
+		var builder strings.Builder
 		for round := range 24 {
 			for _, note := range notes {
-				built.WriteString(strings.ToUpper(note.Title))
-				built.WriteString(":")
-				built.WriteString(strings.Repeat(note.Body, 1+round%3))
-				built.WriteString(" ")
+				builder.WriteString(strings.ToUpper(note.Title))
+				builder.WriteString(":")
+				builder.WriteString(strings.Repeat(note.Body, 1+round%3))
+				builder.WriteString(" ")
 			}
 		}
-		digest := built.String()
+		digest := builder.String()
 		if len(digest) > 24 {
 			digest = digest[:24]
 		}
@@ -103,11 +103,11 @@ func digesting(notes []Note) storing[string] {
 	})
 }
 
-// ranking finds the longest title, and refuses twice before it does.
+// rankTitles finds the longest title, and refuses twice before it does.
 //
 // A retry inside a stage, so the trace shows the attempts as events on the
 // stage's own bar rather than as a mystery in the total.
-func ranking(notes []Note) storing[string] {
+func rankTitles(notes []Note) task[string] {
 	attempts := 0
 	return effect.From(func(context.Context, effect.Unit) effect.Exit[Refusal, string] {
 		attempts++

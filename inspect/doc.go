@@ -11,7 +11,7 @@
 //
 // And it can name a request. A runtime brackets what a program tells it to
 // bracket, so a handler that opens no span of its own contributes nothing to a
-// trace. Observed is the middleware that makes every request a span named for
+// trace. Tracer is the middleware that makes every request a span named for
 // its route, annotated with the method and the status it answered with.
 //
 // The inspector is itself an effect-golang-web program: a mountable Routes

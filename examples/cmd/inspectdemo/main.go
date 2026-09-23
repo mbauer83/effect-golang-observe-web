@@ -43,25 +43,25 @@ func main() {
 	// aggregate behind a queue. The vocabulary comes from the routes
 	// themselves, so a route added to the surface is measured without anybody
 	// remembering it in a second place.
-	watched, observing, err := watching()
+	telemetry, observer, err := newTelemetry()
 	if err != nil {
 		fail(err)
 	}
 	runtime, err := effect.NewRuntime(
-		effect.WithObserver(observing),
+		effect.WithObserver(observer),
 		effect.WithDebugTracking(),
 	)
 	if err != nil {
 		fail(err)
 	}
-	watched.Owned = runtime.LiveWork
+	telemetry.LiveWork = runtime.LiveWork
 
 	store, built := runtime.Run(context.Background(), effect.Unit{},
 		inspected.NewStore(inspected.Note{Title: "First", Body: "a note"})).Value()
 	if !built {
 		fail(errors.New("the store could not be built"))
 	}
-	surface, err := inspected.Surface(store, watched)
+	surface, err := inspected.Surface(store, telemetry)
 	if err != nil {
 		fail(err)
 	}
@@ -70,11 +70,11 @@ func main() {
 		fail(err)
 	}
 
-	serving, stop := context.WithCancel(context.Background())
+	ctx, stop := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		runtime.Run(serving, effect.Unit{}, inspected.Serve(listener, boundary, surface))
+		runtime.Run(ctx, effect.Unit{}, inspected.Serve(listener, boundary, surface))
 	}()
 	fmt.Printf("inspected: listening on %s, inspector at %s%s\n",
 		base, base, inspect.DefaultAt)
@@ -85,9 +85,9 @@ func main() {
 	if *serve {
 		fmt.Printf("\nserving. open %s%s, or send an interrupt to stop\n",
 			base, inspect.DefaultAt)
-		waiting, done := signal.NotifyContext(context.Background(), os.Interrupt)
+		interrupt, done := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer done()
-		<-waiting.Done()
+		<-interrupt.Done()
 	}
 
 	stop()
@@ -97,7 +97,7 @@ func main() {
 	}
 }
 
-// watching assembles the telemetry the inspector reads.
+// newTelemetry assembles the telemetry the inspector reads.
 //
 // The vocabulary is the interesting part and the only part left: the
 // program's routes, the report's stages, the inspector's own routes, and the
@@ -110,12 +110,12 @@ func main() {
 // Classes rather than scalars, because the size buckets are what this demo has
 // to show: reading them costs about twenty nanoseconds more, and keeping them
 // is a set of classes per name.
-func watching() (*inspect.Watched, effect.Observer, error) {
-	named := append(inspect.Names(declarations()), inspected.Stages...)
-	named = append(named, inspect.Names(inspecting())...)
-	named = append(named, web.PhaseNames()...)
-	return inspect.Watching(inspect.WatchingTerms{
-		Named:  named,
+func newTelemetry() (*inspect.Telemetry, effect.Observer, error) {
+	names := append(inspect.Names(declarations()), inspected.Stages...)
+	names = append(names, inspect.Names(inspectorDeclarations())...)
+	names = append(names, web.PhaseNames()...)
+	return inspect.NewTelemetry(inspect.TelemetryConfig{
+		Names:  names,
 		Recent: 512,
 		Detail: inspect.Classes,
 	})
@@ -132,12 +132,12 @@ func declarations() []web.Declaration {
 	}
 }
 
-// inspecting are the inspector's own routes, for the vocabulary. Its handlers
-// need a Watched and its declarations do not, so an empty one is enough to ask
+// inspectorDeclarations are the inspector's own routes, for the vocabulary. Its handlers
+// need a Telemetry and its declarations do not, so an empty one is enough to ask
 // what it serves.
-func inspecting() []web.Declaration {
+func inspectorDeclarations() []web.Declaration {
 	routes, err := inspect.Routes[effect.Unit, inspected.Refusal](
-		&inspect.Watched{}, inspect.DefaultAt)
+		&inspect.Telemetry{}, inspect.DefaultAt)
 	if err != nil {
 		fail(err)
 	}

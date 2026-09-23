@@ -1,14 +1,14 @@
 # Inspector reference
 
 ```go
-inspect.Observing[R, E](costs) web.Matched[R, E]   // the whole integration
+inspect.Tracer[R, E](costs) web.RouteMiddleware[R, E]   // the whole integration
 inspect.Names(declarations) []string              // the metric vocabulary
 inspect.NameOf(declaration) string
 
 inspect.Routes[R, E](watched, at) ([]web.Route[R, E], error)
 inspect.Surface[R, E](watched, at) (web.Routes[R, E], error)
 
-inspect.Watched{Running, Fibers, Window, Collected, Queued, Owned, Surface}
+inspect.Telemetry{Spans, Fibers, Window, Collector, Buffer, LiveWork, Series, Costs, Surface}
 func (watched Watched) Take(now time.Time) Snapshot
 inspect.Read(entity) (Snapshot, error)
 inspect.Write(taken) ([]byte, error)
@@ -23,8 +23,8 @@ inspect.Licence() []byte
 ```go
 surface, err := web.NewRoutes(routes...)          // written as any program writes them
 surface = surface.
-    Measuring(inspect.Sampling(costs)).           // optional: the phases too
-    Wrapping(inspect.Observing[R, E](costs))
+    WithPhaseSampler(inspect.Sampler(costs)).     // optional: the phases too
+    WithMiddleware(inspect.Tracer[R, E](costs))
 ```
 
 That is all of it. **Nothing about how the routes are declared or handled
@@ -33,8 +33,8 @@ route somebody adds this morning is covered. Turning it off is not applying it,
 which a caller can decide from a flag at start-up:
 
 ```go
-if settings.Observing {
-    surface = surface.Wrapping(inspect.Observing[R, E](costs))
+if settings.Traced {
+    surface = surface.WithMiddleware(inspect.Tracer[R, E](costs))
 }
 ```
 
@@ -42,7 +42,7 @@ An earlier version of this module asked a program to swap `web.Handle` for a
 different constructor at every route. That was bad integration for exactly
 those reasons, and the fix was to add the missing seam to
 [`web`](https://github.com/mbauer83/effect-golang-web/blob/main/docs/reference/web.md)
-— `Matched` and `Routes.Wrapping` — rather than to keep routing around it.
+— `RouteMiddleware` and `Routes.WithMiddleware` — rather than to keep routing around it.
 
 A runtime brackets what a program tells it to bracket, so without the setting a
 handler that opens no span of its own contributes nothing to a trace: a request
@@ -63,7 +63,7 @@ same declarations that dispatch the requests, so a route added to the surface
 is measured without anybody remembering it in a second place:
 
 ```go
-metrics.Collect(metrics.Naming(inspect.Names(surface.Declarations())...))
+metrics.NewCollector(metrics.NewVocabulary(inspect.Names(surface.Declarations())...))
 ```
 
 ## Mounting
@@ -92,27 +92,25 @@ Go error and is never a failure channel.
 
 ## What a reading contains
 
-`Watched` names the parts and every one is optional: an inspector with no
+`Telemetry` names the parts and every one is optional: an inspector with no
 collector shows no measurements rather than refusing to start.
 
 | Part | Question |
 |---|---|
 | `Fibers` | which fibers are running, nested as forked, with ages |
-| `Owned` | what the runtime still holds (`runtime.LiveWork`) |
+| `LiveWork` | what the runtime still holds (`runtime.LiveWork`) |
 | `Running` | which spans are open, with ages |
 | `Window` | the recent events, folded into a trace |
-| `Collected` | bounded counts, durations and delays |
-| `Queued` | how many events the queue discarded |
+| `Collector` | bounded counts, durations and delays |
+| `Buffer` | how many events the queue discarded |
 | `Series` | memory and compute over time |
 | `Costs` | what the process spent while each name's work ran |
 | `Surface` | the routes being served |
 
-**A `Watched` is handed over by value, so it must be complete when `Routes` or
-`Surface` is called.** Assigning a field afterwards assigns it to a copy the
-inspector has already taken. `Owned` and `Surface` are functions, so what a
-reading reports is what they say at that moment — and a surface that includes
-the inspector's own routes is expressed by closing over the variable the
-assembled routes will land in.
+**A `Telemetry` is handed over by pointer, and read when a snapshot is
+taken.** A field assigned after `Routes` or `Surface` is called is what the next
+snapshot reports. `LiveWork` is a function, so what a reading reports is what it
+says at that moment.
 
 **A reading is nearly consistent, not consistent.** The live spans, the fibers,
 the window and the aggregate are read one after another, and a program does not
@@ -136,7 +134,7 @@ absolute clock reading would make the page's arithmetic depend on whose clock
 it was. `AgeMicros` is the other half, for a span that has not ended and
 therefore has no duration to give.
 
-`Owned.Counted` says whether the runtime was built to keep its counters — off
+`LiveWork.Counted` says whether the runtime was built to keep its counters — off
 by default, since they cost a pair of atomics per fiber and per resource. Two
 zeroes and "nobody is counting" look identical otherwise.
 
@@ -144,7 +142,7 @@ zeroes and "nobody is counting" look identical otherwise.
 means: a route that spends all of itself inside one stage is not where the
 time went, the stage is, and ranking by total would blame the route.
 
-`Owned.Counted` says whether the runtime was built to keep its counters — off
+`LiveWork.Counted` says whether the runtime was built to keep its counters — off
 by default, since they cost a pair of atomics per fiber and per resource. Two
 zeroes and "nobody is counting" look identical otherwise.
 
@@ -155,18 +153,18 @@ will render.
 
 ## Measuring a stage, and a phase
 
-`Observing` accounts each route under its own name when it is given a
+`Tracer` accounts each route under its own name when it is given a
 `*process.Costs`, and a `nil` turns that half off: the cost is real, two reads
 of `runtime/metrics` per request.
 
-`Sampling` does the same for the route's own phases — decoding, handling,
+`Sampler` does the same for the route's own phases — decoding, handling,
 encoding. The transports name those and cannot measure them: they read no
-counters and depend on nothing that does, so `web.Routes.Measuring` hands each
+counters and depend on nothing that does, so `web.Routes.WithPhaseSampler` hands each
 phase to a sampler and this is the sampler. Without it the phases appear on the
 timeline with no figures, which is what they did until it existed.
 
 ```go
-surface = surface.Measuring(inspect.Sampling(costs)).Wrapping(observing)
+surface = surface.WithPhaseSampler(inspect.Sampler(costs)).WithMiddleware(inspect.Tracer[R, E](costs))
 ```
 
 Declare `web.PhaseNames()` in the vocabulary and the account alike, or three
@@ -176,13 +174,13 @@ spans per request land in the undeclared bucket.
 in twenty microseconds reports zero CPU. The allocation counters are exact and
 do not have this problem.
 
-Inside a handler, `process.Measured` gives a stage its own span, name and
+Inside a handler, `process.Measure` gives a stage its own span, name and
 account in one call — which is what makes a timeline worth drawing and a hot
 path worth ranking:
 
 ```go
-held := do.Await(process.Measured(costs, "read", store.All()))
-digest := do.Await(process.Measured(costs, "digest", digesting(held)))
+held := do.Await(process.Measure(costs, "read", store.All()))
+digest := do.Await(process.Measure(costs, "digest", digesting(held)))
 ```
 
 ## What a span says it cost, and what a name says

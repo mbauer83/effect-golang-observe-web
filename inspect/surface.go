@@ -24,12 +24,12 @@ const DefaultAt = "/inspect"
 //
 // Three endpoints. The page is what a person opens; the snapshot is what the
 // page reads and what a script reads; the contract is what says so.
-func Surface[R, E any](watched *Watched, at string) (web.Routes[R, E], error) {
-	mounted, err := Routes[R, E](watched, at)
+func Surface[R, E any](telemetry *Telemetry, at string) (web.Routes[R, E], error) {
+	routes, err := Routes[R, E](telemetry, at)
 	if err != nil {
 		return web.Routes[R, E]{}, err
 	}
-	return web.NewRoutes(mounted...)
+	return web.NewRoutes(routes...)
 }
 
 // Routes are the inspector's routes, for mounting inside a program's own
@@ -40,17 +40,17 @@ func Surface[R, E any](watched *Watched, at string) (web.Routes[R, E], error) {
 // dispatches everything and an ambiguity between them is reported at start-up
 // like any other.
 //
-//	surface, err := web.NewRoutes(append(mine, inspecting...)...)
-func Routes[R, E any](watched *Watched, at string) ([]web.Route[R, E], error) {
-	mounted := mountedAt(at)
-	own := []web.Route[R, E]{
-		page[R, E](mounted),
-		snapshot[R, E](watched, mounted),
-		asset[R, E](mounted, "/uplot.js", "text/javascript; charset=utf-8",
+//	surface, err := web.NewRoutes(append(mine, inspector...)...)
+func Routes[R, E any](telemetry *Telemetry, at string) ([]web.Route[R, E], error) {
+	prefix := mountPoint(at)
+	routes := []web.Route[R, E]{
+		page[R, E](prefix),
+		snapshot[R, E](telemetry, prefix),
+		asset[R, E](prefix, "/uplot.js", "text/javascript; charset=utf-8",
 			"The chart library the page draws with", Script),
-		asset[R, E](mounted, "/uplot.css", "text/css; charset=utf-8",
+		asset[R, E](prefix, "/uplot.css", "text/css; charset=utf-8",
 			"The chart library's stylesheet", Stylesheet),
-		asset[R, E](mounted, "/uplot.LICENSE", "text/plain; charset=utf-8",
+		asset[R, E](prefix, "/uplot.LICENSE", "text/plain; charset=utf-8",
 			"The chart library's licence", Licence),
 	}
 
@@ -58,28 +58,28 @@ func Routes[R, E any](watched *Watched, at string) ([]web.Route[R, E], error) {
 	// and the contract route added afterwards. The contract describes the
 	// inspector and not the route serving it, which is the ordinary
 	// arrangement -- a reader already knows where the document is.
-	described, err := web.NewRoutes(own...)
+	surface, err := web.NewRoutes(routes...)
 	if err != nil {
-		return nil, Fault{Doing: "assembling the inspector", Err: err}
+		return nil, Fault{Op: "assembling the inspector", Err: err}
 	}
-	contract, err := describe(described, mounted)
+	contract, err := describe(surface, prefix)
 	if err != nil {
 		return nil, err
 	}
-	return append(own, published[R, E](contract, mounted)), nil
+	return append(routes, contractRoute[R, E](contract, prefix)), nil
 }
 
-// mountedAt normalises the mount point, so a caller may write "/debug",
+// mountPoint normalises the mount point, so a caller may write "/debug",
 // "/debug/" or "" and get the same surface.
-func mountedAt(at string) string {
-	trimmed := strings.TrimSuffix(strings.TrimSpace(at), "/")
-	if trimmed == "" {
+func mountPoint(at string) string {
+	path := strings.TrimSuffix(strings.TrimSpace(at), "/")
+	if path == "" {
 		return DefaultAt
 	}
-	if !strings.HasPrefix(trimmed, "/") {
-		return "/" + trimmed
+	if !strings.HasPrefix(path, "/") {
+		return "/" + path
 	}
-	return trimmed
+	return path
 }
 
 // page serves the inspector itself: one document, no external assets.
@@ -90,8 +90,8 @@ func mountedAt(at string) string {
 func page[R, E any](at string) web.Route[R, E] {
 	return web.Handle(
 		web.GET(at, web.Nothing(), web.ReturnsRaw(http.StatusOK, "text/html; charset=utf-8")).
-			Summary("The inspector").
-			Describe("One document, which reads the snapshot below."),
+			WithSummary("The inspector").
+			WithDescription("One document, which reads the snapshot below."),
 		func(effect.Unit) effect.Effect[R, E, []byte] {
 			return effect.For[R, E]().Succeed(Page())
 		},
@@ -99,18 +99,18 @@ func page[R, E any](at string) web.Route[R, E] {
 }
 
 // snapshot serves one reading, described.
-func snapshot[R, E any](watched *Watched, at string) web.Route[R, E] {
+func snapshot[R, E any](telemetry *Telemetry, at string) web.Route[R, E] {
 	return web.Handle(
 		web.GET(at+"/snapshot", web.Nothing(),
 			web.Returns(http.StatusOK, SnapshotSchema)).
-			Summary("One reading of the program's own telemetry").
-			Describe("The spans open now, the recent events as a tree, the bounded "+
+			WithSummary("One reading of the program's own telemetry").
+			WithDescription("The spans open now, the recent events as a tree, the bounded "+
 				"measurements, and the surface being served. Read one after another "+
 				"rather than at one instant, because a running program does not stop "+
 				"between them."),
 		func(effect.Unit) effect.Effect[R, E, Snapshot] {
 			return effect.For[R, E]().Suspend(func() effect.Effect[R, E, Snapshot] {
-				return effect.For[R, E]().Succeed(watched.Take(time.Now()))
+				return effect.For[R, E]().Succeed(telemetry.Take(time.Now()))
 			}).WithName("take-snapshot")
 		},
 	)
@@ -132,24 +132,24 @@ func asset[R, E any](
 ) web.Route[R, E] {
 	return web.Handle(
 		web.GET(at+name, web.Nothing(), web.ReturnsRaw(http.StatusOK, mediaType)).
-			Summary(summary),
+			WithSummary(summary),
 		func(effect.Unit) effect.Effect[R, E, []byte] {
 			return effect.For[R, E]().Succeed(content())
 		},
 	)
 }
 
-// published serves the inspector's own contract.
+// contractRoute serves the inspector's own contract.
 //
 // Projected from the same declarations that dispatch the requests, so a script
 // reading the snapshot has a described shape to read it as rather than a
 // guess. A tool whose API is guessed at is one somebody writes a client for
 // twice.
-func published[R, E any](contract []byte, at string) web.Route[R, E] {
+func contractRoute[R, E any](contract []byte, at string) web.Route[R, E] {
 	return web.Handle(
 		web.GET(at+"/openapi.json", web.Nothing(),
 			web.ReturnsRaw(http.StatusOK, "application/json")).
-			Summary("The contract the inspector is served from"),
+			WithSummary("The contract the inspector is served from"),
 		func(effect.Unit) effect.Effect[R, E, []byte] {
 			return effect.For[R, E]().Succeed(contract)
 		},
@@ -157,7 +157,7 @@ func published[R, E any](contract []byte, at string) web.Route[R, E] {
 }
 
 func describe[R, E any](surface web.Routes[R, E], at string) ([]byte, error) {
-	rendered, err := openapi.Describe(
+	spec, err := openapi.Describe(
 		openapi.Info{
 			Title:       "effect-golang inspector",
 			Version:     "1.0.0",
@@ -166,7 +166,7 @@ func describe[R, E any](surface web.Routes[R, E], at string) ([]byte, error) {
 		surface.Declarations(),
 	).Render()
 	if err != nil {
-		return nil, Fault{Doing: "describing the inspector at " + at, Err: err}
+		return nil, Fault{Op: "describing the inspector at " + at, Err: err}
 	}
-	return rendered, nil
+	return spec, nil
 }

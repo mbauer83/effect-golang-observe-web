@@ -8,15 +8,15 @@ package inspect
 // a Go error from assembly, where a mistake in the surface is found at
 // start-up.
 type Fault struct {
-	Doing string
-	Err   error
+	Op  string
+	Err error
 }
 
 func (fault Fault) Error() string {
 	if fault.Err == nil {
-		return "inspect: " + fault.Doing
+		return "inspect: " + fault.Op
 	}
-	return "inspect: " + fault.Doing + ": " + fault.Err.Error()
+	return "inspect: " + fault.Op + ": " + fault.Err.Error()
 }
 
 func (fault Fault) Unwrap() error { return fault.Err }

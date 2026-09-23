@@ -43,7 +43,7 @@ type Process struct {
 	AllocatedBytes int64
 	BytesPerSecond float64
 	Busy           float64
-	Collecting     float64
+	GCShare        float64
 
 	Points []Point
 }
@@ -86,13 +86,13 @@ type Cost struct {
 	//
 	// Exact over the runs the account kept rather than a bound from a
 	// histogram: these are the measurements sorted, so each is a run that
-	// happened. KeptRuns says how many they are drawn from, because a
+	// happened. SampleSize says how many they are drawn from, because a
 	// ninety-ninth percentile over three runs is a sentence with no content.
 	AllocatedP50Bytes int64
 	AllocatedP95Bytes int64
 	AllocatedP99Bytes int64
 	ObjectsP95        int64
-	KeptRuns          int64
+	SampleSize        int64
 	CPUSecondsDuring  float64
 	LongestMicros     int64
 	Collections       int64
@@ -115,13 +115,13 @@ type Cost struct {
 // usual amount would be invisible in the average, which is the run worth
 // finding.
 type Run struct {
-	// EndedMicros is the offset from the earliest span in this reading, so it
+	// EndMicros is the offset from the earliest span in this reading, so it
 	// can be compared against a span's window without either side knowing
 	// whose clock it came from. Zero when there are no spans to measure from.
-	EndedMicros int64
-	Micros      int64
-	Bytes       int64
-	Objects     int64
+	EndMicros int64
+	Micros    int64
+	Bytes     int64
+	Objects   int64
 }
 
 // SizeClass is one of Go's allocation size classes and how many allocations

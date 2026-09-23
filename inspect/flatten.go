@@ -21,18 +21,18 @@ import (
 // The offsets are relative because that is all a page needs and all it should
 // be given: an absolute clock reading would make the page's arithmetic depend
 // on whose clock it was.
-func flattenTree(assembled trace.Trace, now time.Time, origin time.Time) []Span {
-	flattened := []Span{}
+func flattenTree(tree trace.Trace, now time.Time, origin time.Time) []Span {
+	result := []Span{}
 	// The walk visits a root before its children, so the identity computed at
 	// depth zero is the one the spans under it belong to.
 	identity := ""
-	assembled.Walk(func(span trace.Span, depth int) {
+	tree.Walk(func(span trace.Span, depth int) {
 		if depth == 0 {
 			identity = trace.Identity(span)
 		}
-		flattened = append(flattened, spanOf(span, int64(depth), now, origin, identity))
+		result = append(result, spanOf(span, int64(depth), now, origin, identity))
 	})
-	return flattened
+	return result
 }
 
 // earliest is the start of the earliest span, or the zero time when there are
@@ -40,8 +40,8 @@ func flattenTree(assembled trace.Trace, now time.Time, origin time.Time) []Span 
 func earliest(spans []trace.Span) time.Time {
 	origin := time.Time{}
 	for _, span := range spans {
-		if origin.IsZero() || span.Started.Before(origin) {
-			origin = span.Started
+		if origin.IsZero() || span.StartTime.Before(origin) {
+			origin = span.StartTime
 		}
 	}
 	return origin
@@ -51,22 +51,22 @@ func earliest(spans []trace.Span) time.Time {
 // each at depth zero because what encloses them may not be in the list.
 func flatten(spans []trace.Span, now time.Time) []Span {
 	origin := earliest(spans)
-	flattened := make([]Span, 0, len(spans))
+	result := make([]Span, 0, len(spans))
 	for _, span := range spans {
 		// No identity: this list has no tree, so which trace a span belongs to
 		// is a question it cannot answer -- its root may not be in the window.
-		flattened = append(flattened, spanOf(span, 0, now, origin, ""))
+		result = append(result, spanOf(span, 0, now, origin, ""))
 	}
-	return flattened
+	return result
 }
 
 // flattenFibers walks the forked tree and records the depth, as the spans do.
 func flattenFibers(fibers []trace.Fiber, now time.Time) []Fiber {
-	flattened := []Fiber{}
+	result := []Fiber{}
 	for _, fiber := range fibers {
-		flattened = appendFiber(flattened, fiber, 0, now)
+		result = appendFiber(result, fiber, 0, now)
 	}
-	return flattened
+	return result
 }
 
 func appendFiber(into []Fiber, fiber trace.Fiber, depth int64, now time.Time) []Fiber {
@@ -104,12 +104,12 @@ func spanOf(
 		})
 	}
 	attributes := make([]Attribute, 0, len(span.Attributes))
-	for _, held := range span.Attributes {
+	for _, attribute := range span.Attributes {
 		attributes = append(attributes,
-			Attribute{Key: held.Key, Value: held.Value.String()})
+			Attribute{Key: attribute.Key, Value: attribute.Value.String()})
 	}
-	written := Span{
-		StartMicros: offsetFrom(origin, span.Started),
+	result := Span{
+		StartMicros: offsetFrom(origin, span.StartTime),
 		ID:          int64(span.ID),
 		ParentID:    int64(span.ParentID),
 		Trace:       identity,
@@ -119,18 +119,18 @@ func spanOf(
 		Status:      string(span.Status),
 		Micros:      span.Duration.Microseconds(),
 		SelfMicros:  span.Self().Microseconds(),
-		Open:        span.Open(),
+		Open:        span.IsOpen(),
 		Attributes:  attributes,
 		Events:      events,
 	}
-	if span.Open() {
-		written.AgeMicros = span.Age(now).Microseconds()
+	if span.IsOpen() {
+		result.AgeMicros = span.Age(now).Microseconds()
 	}
-	return written
+	return result
 }
 
 func measurementsOf(snapshot metrics.Snapshot) []Measurement {
-	measured := make([]Measurement, 0, len(snapshot.Counts))
+	measurements := make([]Measurement, 0, len(snapshot.Counts))
 	for _, label := range snapshot.Labels() {
 		one := Measurement{
 			Kind:      string(label.Kind),
@@ -138,31 +138,31 @@ func measurementsOf(snapshot metrics.Snapshot) []Measurement {
 			Status:    string(label.Status),
 			Count:     int64(snapshot.Counts[label]),
 		}
-		if held, timed := snapshot.Durations[label]; timed {
-			one.MedianMicros = held.Quantile(0.5).Microseconds()
-			one.P95Micros = held.Quantile(0.95).Microseconds()
-			one.P99Micros = held.Quantile(0.99).Microseconds()
-			one.MaxMicros = held.Max.Microseconds()
+		if durations, timed := snapshot.Durations[label]; timed {
+			one.MedianMicros = durations.Quantile(0.5).Microseconds()
+			one.P95Micros = durations.Quantile(0.95).Microseconds()
+			one.P99Micros = durations.Quantile(0.99).Microseconds()
+			one.MaxMicros = durations.Max.Microseconds()
 		}
-		if held, waited := snapshot.Delays[label]; waited {
-			one.WaitedMicros = held.Sum.Microseconds()
+		if delays, waited := snapshot.Delays[label]; waited {
+			one.DelayMicros = delays.Sum.Microseconds()
 		}
-		measured = append(measured, one)
+		measurements = append(measurements, one)
 	}
-	return measured
+	return measurements
 }
 
 func routesOf(declarations []web.Declaration) []Route {
-	described := make([]Route, 0, len(declarations))
+	routes := make([]Route, 0, len(declarations))
 	for _, declaration := range declarations {
-		described = append(described, Route{
+		routes = append(routes, Route{
 			Method:  declaration.Method,
 			Path:    declaration.Path,
 			Summary: declaration.Summary,
 			Status:  int64(declaration.Status),
 		})
 	}
-	return described
+	return routes
 }
 
 // offsetFrom is a moment as microseconds after the origin, and zero where

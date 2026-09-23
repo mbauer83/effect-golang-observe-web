@@ -71,13 +71,13 @@ type Fiber struct {
 	AgeMicros int64
 }
 
-// Owned is what the runtime still holds, when it was asked to count.
+// LiveWork is what the runtime still holds, when it was asked to count.
 //
 // Zero for a runtime built without debug tracking, which is the default: the
 // counters cost a pair of atomics per fiber and per resource, so the runtime
 // does not keep them unless told to. Counted says which case a reading is,
 // because two zeroes and "not counting" look identical otherwise.
-type Owned struct {
+type LiveWork struct {
 	Counted   bool
 	Fibers    int64
 	Resources int64
@@ -117,8 +117,8 @@ type Measurement struct {
 	P95Micros    int64
 	P99Micros    int64
 	MaxMicros    int64
-	// WaitedMicros is the total delay a retrying or repeating label waited.
-	WaitedMicros int64
+	// DelayMicros is the total delay a retrying or repeating label waited.
+	DelayMicros int64
 }
 
 // Route is one endpoint of the surface being served.
@@ -131,15 +131,15 @@ type Route struct {
 
 // Snapshot is one reading of everything the inspector shows.
 type Snapshot struct {
-	TakenAt      string
-	Process      Process
-	Costs        []Cost
-	Fibers       []Fiber
-	Owned        Owned
-	OpenSpans    []Span
-	Trace        []Span
-	LooseEvents  int64
-	Measurements []Measurement
-	Routes       []Route
-	Dropped      int64
+	TakenAt       string
+	Process       Process
+	Costs         []Cost
+	Fibers        []Fiber
+	LiveWork      LiveWork
+	OpenSpans     []Span
+	Trace         []Span
+	LooseEvents   int64
+	Measurements  []Measurement
+	Routes        []Route
+	DroppedEvents int64
 }

@@ -21,9 +21,9 @@ import (
 )
 
 func TestTheInspectorServesItsPageAndItsOwnContract(t *testing.T) {
-	client := inspecting(t)
+	client := serveExample(t)
 
-	page := fetched(t, client, http.MethodGet, inspect.DefaultAt)
+	page := fetch(t, client, http.MethodGet, inspect.DefaultAt)
 	if page.Status != http.StatusOK {
 		t.Fatalf("expected the page, got %d", page.Status)
 	}
@@ -36,28 +36,28 @@ func TestTheInspectorServesItsPageAndItsOwnContract(t *testing.T) {
 		t.Error("the page reaches outside the process for an asset")
 	}
 
-	contract := fetched(t, client, http.MethodGet, inspect.DefaultAt+"/openapi.json")
+	contract := fetch(t, client, http.MethodGet, inspect.DefaultAt+"/openapi.json")
 	if contract.Status != http.StatusOK {
 		t.Fatalf("expected the contract, got %d", contract.Status)
 	}
 	// It describes the snapshot the page reads, which is what makes a client
 	// of the inspector a client of a contract.
-	for _, wanted := range []string{"Snapshot", "startMicros", "ageMicros", "/snapshot"} {
-		if !strings.Contains(string(contract.Entity), wanted) {
-			t.Errorf("the contract does not mention %q", wanted)
+	for _, want := range []string{"Snapshot", "startMicros", "ageMicros", "/snapshot"} {
+		if !strings.Contains(string(contract.Entity), want) {
+			t.Errorf("the contract does not mention %q", want)
 		}
 	}
 }
 
 func TestTheRuntimesOwnCountsAreReported(t *testing.T) {
-	read := taken(t, inspecting(t))
-	if !read.Owned.Counted {
+	snapshot := readSnapshot(t, serveExample(t))
+	if !snapshot.LiveWork.Counted {
 		t.Fatal("expected the runtime's counts, which this runtime was built to keep")
 	}
 	// Sampled while serving, so the serving fiber and the server's resources
 	// are held: a zero here would mean the sampling missed the program.
-	if read.Owned.Fibers == 0 && read.Owned.Resources == 0 {
-		t.Fatalf("expected the serving work to be owned, got %+v", read.Owned)
+	if snapshot.LiveWork.Fibers == 0 && snapshot.LiveWork.Resources == 0 {
+		t.Fatalf("expected the serving work to be owned, got %+v", snapshot.LiveWork)
 	}
 }
 
@@ -65,14 +65,14 @@ func TestTheProgramsOwnRefusalsStayItsOwn(t *testing.T) {
 	// The inspector never becomes the program's failure. A conflict is still a
 	// 409 from the program's own boundary mapping, with the inspector mounted
 	// on the same surface.
-	client := inspecting(t)
-	sending, err := web.Carrying(web.Requesting{}, inspected.NoteSchema,
+	client := serveExample(t)
+	request, err := web.WithEntity(web.ClientRequest{}, inspected.NoteSchema,
 		inspected.Note{Title: "First", Body: "again"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	exit := effect.Run(context.Background(), effect.Unit{},
-		web.Call[effect.Unit](client, inspected.AddNote, sending))
+		web.Call[effect.Unit](client, inspected.AddNote, request))
 
 	cause, failed := exit.Cause()
 	if !failed {
