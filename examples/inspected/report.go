@@ -15,7 +15,6 @@ import (
 	"github.com/mbauer83/effect-golang-observe/process"
 	"github.com/mbauer83/effect-golang-schema/schema"
 	"github.com/mbauer83/effect-golang/effect"
-	"github.com/mbauer83/effect-golang/experimental/direct"
 )
 
 // Report is what the route answers with.
@@ -56,7 +55,7 @@ var Stages = []string{"read", "count", "digest", "rank"}
 // inspector's cost panel has something to rank and the hot stage is visibly
 // not the slowest one.
 func Reported(store *Store, costs *process.Costs) storing[Report] {
-	return direct.Run(func(do *direct.Do[effect.Unit, Refusal]) Report {
+	return effect.Gen(func(do *effect.Do[effect.Unit, Refusal]) Report {
 		held := do.Await(process.Measured(costs, "read", store.All()))
 		counted := do.Await(process.Measured(costs, "count", counting(held)))
 		digest := do.Await(process.Measured(costs, "digest", digesting(held)))
