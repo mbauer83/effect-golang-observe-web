@@ -144,11 +144,6 @@ func inspectorDeclarations() []web.Declaration {
 	return web.DeclarationsOf(routes...)
 }
 
-// observing is the one observer a runtime takes: the live views inline,
-// because "what is running now" must not be answered from a backlog, and the
-// window and the aggregate behind a queue, because neither is asked often
-// enough to be worth paying for on the observed fiber.
-
 func fail(err error) {
 	fmt.Fprintf(os.Stderr, "inspectdemo: %v\n", err)
 	os.Exit(1)
