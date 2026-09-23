@@ -48,7 +48,7 @@ func Observing[R, E any](costs *process.Costs) web.Matched[R, E] {
 			// reasoned: the same span reports [] one way round and
 			// [method=..., route=...] the other.
 			return process.Costing(costs, name, handler(request)).
-				Named(name).
+				WithName(name).
 				WithSpan(name).
 				Annotate(method, route)
 		}

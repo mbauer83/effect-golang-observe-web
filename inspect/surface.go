@@ -111,7 +111,7 @@ func snapshot[R, E any](watched *Watched, at string) web.Route[R, E] {
 		func(effect.Unit) effect.Effect[R, E, Snapshot] {
 			return effect.For[R, E]().Suspend(func() effect.Effect[R, E, Snapshot] {
 				return effect.For[R, E]().Succeed(watched.Take(time.Now()))
-			}).Named("take-snapshot")
+			}).WithName("take-snapshot")
 		},
 	)
 }

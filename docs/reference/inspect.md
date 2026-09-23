@@ -181,8 +181,8 @@ account in one call — which is what makes a timeline worth drawing and a hot
 path worth ranking:
 
 ```go
-held := direct.Bind(bind, process.Measured(costs, "read", store.All()))
-digest := direct.Bind(bind, process.Measured(costs, "digest", digesting(held)))
+held := do.Await(process.Measured(costs, "read", store.All()))
+digest := do.Await(process.Measured(costs, "digest", digesting(held)))
 ```
 
 ## What a span says it cost, and what a name says

@@ -56,11 +56,11 @@ var Stages = []string{"read", "count", "digest", "rank"}
 // inspector's cost panel has something to rank and the hot stage is visibly
 // not the slowest one.
 func Reported(store *Store, costs *process.Costs) storing[Report] {
-	return direct.Run(func(bind *direct.Binder[effect.Unit, Refusal]) Report {
-		held := direct.Bind(bind, process.Measured(costs, "read", store.All()))
-		counted := direct.Bind(bind, process.Measured(costs, "count", counting(held)))
-		digest := direct.Bind(bind, process.Measured(costs, "digest", digesting(held)))
-		longest := direct.Bind(bind, process.Measured(costs, "rank", ranking(held)))
+	return direct.Run(func(do *direct.Do[effect.Unit, Refusal]) Report {
+		held := do.Await(process.Measured(costs, "read", store.All()))
+		counted := do.Await(process.Measured(costs, "count", counting(held)))
+		digest := do.Await(process.Measured(costs, "digest", digesting(held)))
+		longest := do.Await(process.Measured(costs, "rank", ranking(held)))
 		return Report{
 			Notes:   len(held),
 			Words:   counted,
