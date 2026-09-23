@@ -60,7 +60,7 @@ func Routes[R, E any](telemetry *Telemetry, at string) ([]web.Route[R, E], error
 	// arrangement -- a reader already knows where the document is.
 	surface, err := web.NewRoutes(routes...)
 	if err != nil {
-		return nil, Fault{Op: "assembling the inspector", Err: err}
+		return nil, Fault{Op: "assemble the inspector", Err: err}
 	}
 	contract, err := describe(surface, prefix)
 	if err != nil {
@@ -166,7 +166,7 @@ func describe[R, E any](surface web.Routes[R, E], at string) ([]byte, error) {
 		surface.Declarations(),
 	).Render()
 	if err != nil {
-		return nil, Fault{Op: "describing the inspector at " + at, Err: err}
+		return nil, Fault{Op: "describe the inspector at " + at, Err: err}
 	}
 	return spec, nil
 }

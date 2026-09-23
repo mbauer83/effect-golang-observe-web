@@ -136,7 +136,7 @@ func (telemetry *Telemetry) Take(now time.Time) Snapshot {
 func Read(entity []byte) (Snapshot, error) {
 	snapshot, err := schema.DecodeJSON(SnapshotSchema, entity)
 	if err != nil {
-		return Snapshot{}, Fault{Op: "reading a snapshot", Err: err}
+		return Snapshot{}, Fault{Op: "read a snapshot", Err: err}
 	}
 	return snapshot, nil
 }
@@ -149,7 +149,7 @@ func Read(entity []byte) (Snapshot, error) {
 func Write(snapshot Snapshot) ([]byte, error) {
 	entity, err := schema.EncodeJSON(SnapshotSchema, snapshot)
 	if err != nil {
-		return nil, Fault{Op: "writing a snapshot", Err: err}
+		return nil, Fault{Op: "write a snapshot", Err: err}
 	}
 	return entity, nil
 }
