@@ -15,7 +15,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/mbauer83/effect-golang-observe-web/examples/inspected"
+	"github.com/mbauer83/effect-golang-observe-web/examples/notebook"
 	"github.com/mbauer83/effect-golang-observe-web/inspect"
 	"github.com/mbauer83/effect-golang-web/web"
 	"github.com/mbauer83/effect-golang/effect"
@@ -57,15 +57,15 @@ func main() {
 	telemetry.LiveWork = runtime.LiveWork
 
 	store, built := runtime.Run(context.Background(), effect.Unit{},
-		inspected.NewStore(inspected.Note{Title: "First", Body: "a note"})).Value()
+		notebook.NewStore(notebook.Note{Title: "First", Body: "a note"})).Value()
 	if !built {
 		fail(errors.New("the store could not be built"))
 	}
-	surface, err := inspected.Surface(store, telemetry)
+	surface, err := notebook.Surface(store, telemetry)
 	if err != nil {
 		fail(err)
 	}
-	boundary, err := inspected.Boundary(runtime)
+	boundary, err := notebook.Boundary(runtime)
 	if err != nil {
 		fail(err)
 	}
@@ -74,7 +74,7 @@ func main() {
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		runtime.Run(ctx, effect.Unit{}, inspected.Serve(listener, boundary, surface))
+		runtime.Run(ctx, effect.Unit{}, notebook.Serve(listener, boundary, surface))
 	}()
 	fmt.Printf("inspected: listening on %s, inspector at %s%s\n",
 		base, base, inspect.DefaultAt)
@@ -85,8 +85,8 @@ func main() {
 	if *serve {
 		fmt.Printf("\nserving. open %s%s, or send an interrupt to stop\n",
 			base, inspect.DefaultAt)
-		interrupt, done := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer done()
+		interrupt, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer cancel()
 		<-interrupt.Done()
 	}
 
@@ -111,7 +111,7 @@ func main() {
 // to show: reading them costs about twenty nanoseconds more, and keeping them
 // is a set of classes per name.
 func newTelemetry() (*inspect.Telemetry, effect.Observer, error) {
-	names := append(inspect.Names(declarations()), inspected.Stages...)
+	names := append(inspect.Names(declarations()), notebook.Stages...)
 	names = append(names, inspect.Names(inspectorDeclarations())...)
 	names = append(names, web.PhaseNames()...)
 	return inspect.NewTelemetry(inspect.TelemetryConfig{
@@ -125,10 +125,10 @@ func newTelemetry() (*inspect.Telemetry, effect.Observer, error) {
 // vocabulary comes from.
 func declarations() []web.Declaration {
 	return []web.Declaration{
-		inspected.ListNotes.Declaration(),
-		inspected.AddNote.Declaration(),
-		inspected.Summarise.Declaration(),
-		inspected.FindNote.Declaration(),
+		notebook.ListNotes.Declaration(),
+		notebook.AddNote.Declaration(),
+		notebook.Summarise.Declaration(),
+		notebook.FindNote.Declaration(),
 	}
 }
 
@@ -136,7 +136,7 @@ func declarations() []web.Declaration {
 // need a Telemetry and its declarations do not, so an empty one is enough to ask
 // what it serves.
 func inspectorDeclarations() []web.Declaration {
-	routes, err := inspect.Routes[effect.Unit, inspected.Refusal](
+	routes, err := inspect.Routes[effect.Unit, notebook.Refusal](
 		&inspect.Telemetry{}, inspect.DefaultAt)
 	if err != nil {
 		fail(err)

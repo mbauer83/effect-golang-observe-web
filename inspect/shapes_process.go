@@ -40,7 +40,7 @@ type Process struct {
 	// shares that say whether the program is busy and whether it is spending
 	// that time collecting.
 	OverMicros     int64
-	AllocatedBytes int64
+	AllocBytes     int64
 	BytesPerSecond float64
 	Busy           float64
 	GCShare        float64
@@ -70,17 +70,17 @@ type Point struct {
 // because a reader who takes it for attribution will draw the wrong
 // conclusion, and a paragraph elsewhere will not stop them.
 type Cost struct {
-	Name            string
-	Times           int64
-	AllocatedDuring int64
-	PerRunBytes     int64
+	Name        string
+	Times       int64
+	BytesDuring int64
+	PerRunBytes int64
 	// ObjectsPerRun is how many allocations a run made and MeanObjectBytes
 	// their average size. In Go the count is usually the more actionable of
 	// the two: an allocation costs tens of nanoseconds and a pointer for the
 	// collector to chase whatever its size.
 	ObjectsPerRun   int64
 	MeanObjectBytes int64
-	// AllocatedP50Bytes, AllocatedP95Bytes and AllocatedP99Bytes are where
+	// BytesP50, AllocatedP95Bytes and AllocatedP99Bytes are where
 	// this name's runs fell, and ObjectsP95 how many allocations the worst one
 	// in twenty made.
 	//
@@ -88,14 +88,14 @@ type Cost struct {
 	// histogram: these are the measurements sorted, so each is a run that
 	// happened. SampleSize says how many they are drawn from, because a
 	// ninety-ninth percentile over three runs is a sentence with no content.
-	AllocatedP50Bytes int64
-	AllocatedP95Bytes int64
-	AllocatedP99Bytes int64
-	ObjectsP95        int64
-	SampleSize        int64
-	CPUSecondsDuring  float64
-	LongestMicros     int64
-	Collections       int64
+	BytesP50         int64
+	BytesP95         int64
+	BytesP99         int64
+	ObjectsP95       int64
+	SampleSize       int64
+	CPUSecondsDuring float64
+	LongestMicros    int64
+	Collections      int64
 	// Sizes are the size classes the allocations fell into, smallest first,
 	// or empty when the account was not told to keep them. The disclosed
 	// layer: the bytes and the count first, what shapes they were second.

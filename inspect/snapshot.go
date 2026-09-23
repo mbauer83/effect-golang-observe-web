@@ -76,7 +76,7 @@ type Telemetry struct {
 // than implying.
 func (telemetry *Telemetry) Take(now time.Time) Snapshot {
 	snapshot := Snapshot{
-		TakenAt:      now.UTC().Format(time.RFC3339Nano),
+		Time:         now.UTC().Format(time.RFC3339Nano),
 		Fibers:       []Fiber{},
 		OpenSpans:    []Span{},
 		Trace:        []Span{},
@@ -121,7 +121,7 @@ func (telemetry *Telemetry) Take(now time.Time) Snapshot {
 		snapshot.Measurements = measurementsOf(telemetry.Collector.Snapshot())
 	}
 	if telemetry.Buffer != nil {
-		snapshot.DroppedEvents = int64(telemetry.Buffer.Drops())
+		snapshot.Drops = int64(telemetry.Buffer.Drops())
 	}
 	return snapshot
 }

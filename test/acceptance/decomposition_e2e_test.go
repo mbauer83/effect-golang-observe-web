@@ -146,9 +146,9 @@ func TestEachStageIsAccountedSeparately(t *testing.T) {
 	}
 	// The route's window covers its stages, so it allocated at least as much
 	// as the heaviest of them.
-	if route.AllocatedDuring < costs["digest"].AllocatedDuring {
+	if route.BytesDuring < costs["digest"].BytesDuring {
 		t.Fatalf("expected the route to account for its stages, got %d against %d",
-			route.AllocatedDuring, costs["digest"].AllocatedDuring)
+			route.BytesDuring, costs["digest"].BytesDuring)
 	}
 }
 

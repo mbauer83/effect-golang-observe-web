@@ -88,7 +88,7 @@ func report(base string) {
 		fail(err)
 	}
 
-	fmt.Printf("\nthe inspector, read at %s\n", snapshot.TakenAt)
+	fmt.Printf("\nthe inspector, read at %s\n", snapshot.Time)
 	fmt.Printf("  the runtime owns %d fiber(s) and %d resource(s)\n",
 		snapshot.LiveWork.Fibers, snapshot.LiveWork.Resources)
 	fmt.Printf("  %d span(s) in the window, %d event(s) outside every span\n",
@@ -112,7 +112,7 @@ func report(base string) {
 		snapshot.Process.Goroutines, snapshot.Process.Threads,
 		snapshot.Process.Running, snapshot.Process.Runnable, snapshot.Process.Waiting)
 	fmt.Printf("    allocated %s at %s/s, %.1f%% busy, %.1f%% of that collecting\n",
-		bytes(snapshot.Process.AllocatedBytes), bytes(int64(snapshot.Process.BytesPerSecond)),
+		bytes(snapshot.Process.AllocBytes), bytes(int64(snapshot.Process.BytesPerSecond)),
 		100*snapshot.Process.Busy, 100*snapshot.Process.GCShare)
 
 	if len(snapshot.Costs) > 0 {

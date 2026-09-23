@@ -39,7 +39,7 @@ func sampleProcess(series *process.Series) Process {
 	}
 	if recent, measurable := series.Change(); measurable {
 		result.OverMicros = recent.Duration.Microseconds()
-		result.AllocatedBytes = int64(recent.AllocatedBytes)
+		result.AllocBytes = int64(recent.AllocBytes)
 		result.BytesPerSecond = recent.AllocationRate()
 		result.Busy = recent.Busy()
 		result.GCShare = recent.GCShare()
@@ -78,22 +78,22 @@ func costsOf(costs []process.Cost, origin time.Time) []Cost {
 	result := make([]Cost, 0, len(costs))
 	for _, cost := range costs {
 		result = append(result, Cost{
-			Name:              cost.Name,
-			Times:             int64(cost.Times),
-			AllocatedDuring:   int64(cost.BytesDuring),
-			PerRunBytes:       int64(cost.PerRun()),
-			ObjectsPerRun:     int64(cost.ObjectsPerRun()),
-			MeanObjectBytes:   int64(cost.MeanObjectBytes()),
-			AllocatedP50Bytes: int64(cost.BytesAt(0.5)),
-			AllocatedP95Bytes: int64(cost.BytesAt(0.95)),
-			AllocatedP99Bytes: int64(cost.BytesAt(0.99)),
-			ObjectsP95:        int64(cost.ObjectsAt(0.95)),
-			SampleSize:        int64(cost.RunCount()),
-			CPUSecondsDuring:  cost.CPUSecondsDuring,
-			LongestMicros:     cost.Longest.Microseconds(),
-			Collections:       int64(cost.Collections),
-			Sizes:             sizesOf(cost.Spread.Bands()),
-			Runs:              runsOf(cost.Runs, origin),
+			Name:             cost.Name,
+			Times:            int64(cost.Times),
+			BytesDuring:      int64(cost.BytesDuring),
+			PerRunBytes:      int64(cost.PerRun()),
+			ObjectsPerRun:    int64(cost.ObjectsPerRun()),
+			MeanObjectBytes:  int64(cost.MeanObjectBytes()),
+			BytesP50:         int64(cost.BytesAt(0.5)),
+			BytesP95:         int64(cost.BytesAt(0.95)),
+			BytesP99:         int64(cost.BytesAt(0.99)),
+			ObjectsP95:       int64(cost.ObjectsAt(0.95)),
+			SampleSize:       int64(cost.RunCount()),
+			CPUSecondsDuring: cost.CPUSecondsDuring,
+			LongestMicros:    cost.Longest.Microseconds(),
+			Collections:      int64(cost.Collections),
+			Sizes:            sizesOf(cost.Spread.Bands()),
+			Runs:             runsOf(cost.Runs, origin),
 		})
 	}
 	return result
@@ -119,8 +119,8 @@ func runsOf(runs []process.Run, origin time.Time) []Run {
 		result = append(result, Run{
 			EndMicros: run.EndTime.Sub(origin).Microseconds(),
 			Micros:    run.Change.Duration.Microseconds(),
-			Bytes:     int64(run.Change.AllocatedBytes),
-			Objects:   int64(run.Change.AllocatedObjects),
+			Bytes:     int64(run.Change.AllocBytes),
+			Objects:   int64(run.Change.AllocObjects),
 		})
 	}
 	return result

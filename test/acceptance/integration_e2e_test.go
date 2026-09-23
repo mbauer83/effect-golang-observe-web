@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mbauer83/effect-golang-observe-web/examples/inspected"
+	"github.com/mbauer83/effect-golang-observe-web/examples/notebook"
 	"github.com/mbauer83/effect-golang-observe-web/inspect"
 	"github.com/mbauer83/effect-golang-observe/observe"
 	"github.com/mbauer83/effect-golang-observe/process"
@@ -46,18 +46,18 @@ func servePlain(t *testing.T, observed bool) (*web.Client, *observe.Recent) {
 		t.Fatal(err)
 	}
 	store, built := runtime.Run(context.Background(), effect.Unit{},
-		inspected.NewStore(inspected.Note{Title: "First", Body: "a note"})).Value()
+		notebook.NewStore(notebook.Note{Title: "First", Body: "a note"})).Value()
 	if !built {
 		t.Fatal("the store could not be built")
 	}
 
 	// Written as any program writes them.
 	surface, err := web.NewRoutes(
-		web.Handle(inspected.ListNotes,
-			func(effect.Unit) effect.Effect[effect.Unit, inspected.Refusal, []inspected.Note] {
+		web.Handle(notebook.ListNotes,
+			func(effect.Unit) effect.Effect[effect.Unit, notebook.Refusal, []notebook.Note] {
 				return store.All()
 			}),
-		web.Handle(inspected.FindNote, store.Find),
+		web.Handle(notebook.FindNote, store.Find),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -65,10 +65,10 @@ func servePlain(t *testing.T, observed bool) (*web.Client, *observe.Recent) {
 	// The one difference between an observed program and an unobserved one.
 	if observed {
 		surface = surface.WithMiddleware(
-			inspect.Tracer[effect.Unit, inspected.Refusal](process.NewCosts()))
+			inspect.Tracer[effect.Unit, notebook.Refusal](process.NewCosts()))
 	}
 
-	boundary, err := inspected.Boundary(runtime)
+	boundary, err := notebook.Boundary(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func servePlain(t *testing.T, observed bool) (*web.Client, *observe.Recent) {
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		runtime.Run(ctx, effect.Unit{}, inspected.Serve(listener, boundary, surface))
+		runtime.Run(ctx, effect.Unit{}, notebook.Serve(listener, boundary, surface))
 	}()
 	t.Cleanup(func() {
 		stop()

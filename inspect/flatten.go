@@ -144,7 +144,7 @@ func measurementsOf(snapshot metrics.Snapshot) []Measurement {
 			one.P99Micros = durations.Quantile(0.99).Microseconds()
 			one.MaxMicros = durations.Max.Microseconds()
 		}
-		if delays, waited := snapshot.Delays[label]; waited {
+		if delays, delayed := snapshot.Delays[label]; delayed {
 			one.DelayMicros = delays.Sum.Microseconds()
 		}
 		measurements = append(measurements, one)

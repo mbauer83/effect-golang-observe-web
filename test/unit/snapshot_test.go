@@ -192,8 +192,8 @@ func TestASnapshotRoundTripsThroughItsOwnDescription(t *testing.T) {
 	if len(result.Routes) != 1 || result.Routes[0].Path != "/notes" {
 		t.Fatalf("the crossing changed the surface: %#v", result.Routes)
 	}
-	if result.TakenAt != snapshot.TakenAt {
-		t.Fatalf("the crossing changed the instant: %q against %q", result.TakenAt, snapshot.TakenAt)
+	if result.Time != snapshot.Time {
+		t.Fatalf("the crossing changed the instant: %q against %q", result.Time, snapshot.Time)
 	}
 }
 

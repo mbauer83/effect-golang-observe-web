@@ -1,4 +1,4 @@
-package inspected
+package notebook
 
 // The surface, with the inspector on it.
 

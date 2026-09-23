@@ -140,8 +140,8 @@ var SnapshotSchema = schema.Struct[Snapshot]("Snapshot",
 	// A formatted string and not a time.Time: the page renders it and does no
 	// arithmetic on it, and the format is what an OpenAPI reader wants to see.
 	schema.FieldOf("takenAt", schema.TextFormat("date-time"),
-		func(value Snapshot) string { return value.TakenAt },
-		func(value *Snapshot, field string) { value.TakenAt = field }),
+		func(value Snapshot) string { return value.Time },
+		func(value *Snapshot, field string) { value.Time = field }),
 	schema.FieldOf("process", processSchema,
 		func(value Snapshot) Process { return value.Process },
 		func(value *Snapshot, field Process) { value.Process = field }),
@@ -175,8 +175,8 @@ var SnapshotSchema = schema.Struct[Snapshot]("Snapshot",
 		func(value Snapshot) []Route { return value.Routes },
 		func(value *Snapshot, field []Route) { value.Routes = field }),
 	schema.FieldOf("dropped", schema.Int64(),
-		func(value Snapshot) int64 { return value.DroppedEvents },
-		func(value *Snapshot, field int64) { value.DroppedEvents = field }).
+		func(value Snapshot) int64 { return value.Drops },
+		func(value *Snapshot, field int64) { value.Drops = field }).
 		WithDescription("Dropped is how many events a queued observer discarded, which a tool reporting telemetry should report about itself."),
 ).WithDescription("Snapshot is one reading of a program's own telemetry.")
 

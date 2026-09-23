@@ -1,4 +1,4 @@
-package inspected
+package notebook
 
 // A route with something to decompose.
 //

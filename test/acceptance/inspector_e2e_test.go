@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mbauer83/effect-golang-observe-web/examples/inspected"
+	"github.com/mbauer83/effect-golang-observe-web/examples/notebook"
 	"github.com/mbauer83/effect-golang-observe-web/inspect"
 	"github.com/mbauer83/effect-golang-observe/metrics"
 	"github.com/mbauer83/effect-golang-observe/observe"
@@ -43,7 +43,7 @@ func serveExample(t *testing.T) *web.Client {
 	}
 	// The route names and the report's stage names: the vocabulary the
 	// aggregate and the account are both bounded by.
-	names := append(inspect.Names(declarations()), inspected.Stages...)
+	names := append(inspect.Names(declarations()), notebook.Stages...)
 	telemetry := &inspect.Telemetry{
 		Spans:     trace.NewSpans(),
 		Fibers:    trace.NewFibers(),
@@ -65,15 +65,15 @@ func serveExample(t *testing.T) *web.Client {
 	telemetry.LiveWork = runtime.LiveWork
 
 	store, built := runtime.Run(context.Background(), effect.Unit{},
-		inspected.NewStore(inspected.Note{Title: "First", Body: "a note"})).Value()
+		notebook.NewStore(notebook.Note{Title: "First", Body: "a note"})).Value()
 	if !built {
 		t.Fatal("the store could not be built")
 	}
-	surface, err := inspected.Surface(store, telemetry)
+	surface, err := notebook.Surface(store, telemetry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	boundary, err := inspected.Boundary(runtime)
+	boundary, err := notebook.Boundary(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func serveExample(t *testing.T) *web.Client {
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		runtime.Run(ctx, effect.Unit{}, inspected.Serve(listener, boundary, surface))
+		runtime.Run(ctx, effect.Unit{}, notebook.Serve(listener, boundary, surface))
 	}()
 	t.Cleanup(func() {
 		stop()
@@ -97,10 +97,10 @@ func serveExample(t *testing.T) *web.Client {
 
 func declarations() []web.Declaration {
 	return []web.Declaration{
-		inspected.ListNotes.Declaration(),
-		inspected.AddNote.Declaration(),
-		inspected.Summarise.Declaration(),
-		inspected.FindNote.Declaration(),
+		notebook.ListNotes.Declaration(),
+		notebook.AddNote.Declaration(),
+		notebook.Summarise.Declaration(),
+		notebook.FindNote.Declaration(),
 	}
 }
 

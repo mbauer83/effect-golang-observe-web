@@ -131,15 +131,15 @@ type Route struct {
 
 // Snapshot is one reading of everything the inspector shows.
 type Snapshot struct {
-	TakenAt       string
-	Process       Process
-	Costs         []Cost
-	Fibers        []Fiber
-	LiveWork      LiveWork
-	OpenSpans     []Span
-	Trace         []Span
-	LooseEvents   int64
-	Measurements  []Measurement
-	Routes        []Route
-	DroppedEvents int64
+	Time         string
+	Process      Process
+	Costs        []Cost
+	Fibers       []Fiber
+	LiveWork     LiveWork
+	OpenSpans    []Span
+	Trace        []Span
+	LooseEvents  int64
+	Measurements []Measurement
+	Routes       []Route
+	Drops        int64
 }

@@ -1,7 +1,7 @@
-// Package inspected is a small web program with the inspector mounted, which
+// Package notebook is a small web program with the inspector mounted, which
 // is the whole point demonstrated: the tooling lives inside the program it
 // watches, on the same listener, holding the same telemetry.
-package inspected
+package notebook
 
 import (
 	"net/http"

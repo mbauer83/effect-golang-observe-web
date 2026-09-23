@@ -69,7 +69,7 @@ Then open `/inspect`.
 inspect/                    Watched, Snapshot, Surface, Routes, Observing, Sampling
 inspect/page.html           the page, one checked-in document
 inspect/assets/             the vendored chart library, and its licence
-examples/inspected/         a small web program with the inspector mounted
+examples/notebook/         a small web program with the inspector mounted
 examples/cmd/inspectdemo/   the example as a runnable command
 test/unit/                  the wire conversion
 test/acceptance/            the inspector inside the program, over a socket

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mbauer83/effect-golang-observe-web/examples/inspected"
+	"github.com/mbauer83/effect-golang-observe-web/examples/notebook"
 	"github.com/mbauer83/effect-golang-observe-web/inspect"
 	"github.com/mbauer83/effect-golang-web/web"
 	"github.com/mbauer83/effect-golang/effect"
@@ -66,13 +66,13 @@ func TestTheProgramsOwnRefusalsStayItsOwn(t *testing.T) {
 	// 409 from the program's own boundary mapping, with the inspector mounted
 	// on the same surface.
 	client := serveExample(t)
-	request, err := web.WithEntity(web.ClientRequest{}, inspected.NoteSchema,
-		inspected.Note{Title: "First", Body: "again"})
+	request, err := web.WithEntity(web.ClientRequest{}, notebook.NoteSchema,
+		notebook.Note{Title: "First", Body: "again"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	exit := effect.Run(context.Background(), effect.Unit{},
-		web.Call[effect.Unit](client, inspected.AddNote, request))
+		web.Call[effect.Unit](client, notebook.AddNote, request))
 
 	cause, failed := exit.Cause()
 	if !failed {
