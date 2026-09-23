@@ -218,7 +218,7 @@
   .caveat { color: var(--quiet); font-size: 0.76rem; margin: 0.2rem 0 0.6rem; min-height: 1.5em; }
   /* A line that has something to say only sometimes still occupies its place
      when it does not, so saying it moves nothing below it. */
-  #loose, #owned { min-height: 1.5em; margin: 0.3rem 0 0; }
+  #loose, #liveWork { min-height: 1.5em; margin: 0.3rem 0 0; }
   /* Progressive disclosure: the bytes and the count in the row, the shapes
      they were behind a click. */
   tr.selectable td { cursor: pointer; }
@@ -235,7 +235,7 @@
   <h1>effect-golang inspector</h1>
   <a class="meta" id="app" href="/">the app &rarr;</a>
   <span class="meta" id="taken">reading…</span>
-  <span class="meta" id="dropped"></span>
+  <span class="meta" id="drops"></span>
   <span class="meta fault" id="fault"></span>
   <div class="controls">
     <label class="meta"><input type="checkbox" id="own"> its own traffic</label>
@@ -269,7 +269,7 @@
   <section>
     <h2>Fibers</h2>
     <div id="fibers" class="tree"></div>
-    <p class="meta" id="owned"></p>
+    <p class="meta" id="liveWork"></p>
   </section>
   <section>
     <h2>Open spans</h2>
@@ -753,8 +753,8 @@ function runWithin(runs, span) {
   const from = span.startMicros - 1;
   const to = span.startMicros + (span.open ? span.ageMicros : span.micros) + 1;
   for (const run of runs) {
-    if (run.endedMicros < 0) continue;
-    if (run.endedMicros >= from && run.endedMicros <= to) return run;
+    if (run.endMicros < 0) continue;
+    if (run.endMicros >= from && run.endMicros <= to) return run;
   }
   return null;
 }
@@ -942,13 +942,13 @@ function renderGauges(into, process) {
       { kind: "used", share: process.busy, legend: "" },
     ]);
 
-  gauge(into, "collecting", percent(process.collecting),
+  gauge(into, "gc", percent(process.gcShare),
     "of CPU used", [
-      { kind: "gc", share: process.collecting, legend: process.gcCycles + " collections" },
+      { kind: "gc", share: process.gcShare, legend: process.gcCycles + " collections" },
     ]);
 
   gauge(into, "allocating", bytes(process.bytesPerSecond) + "/s",
-    bytes(process.allocatedBytes) + " in window");
+    bytes(process.allocBytes) + " in window");
 
   gauge(into, "stacks", bytes(process.stackBytes),
     bytes(process.totalBytes) + " mapped");
@@ -1145,7 +1145,7 @@ function marginal(row) {
     if (before.name !== row.name) continue;
     const runs = row.times - before.times;
     if (runs <= 0) return null;
-    return (row.allocatedDuring - before.allocatedDuring) / runs;
+    return (row.bytesDuring - before.bytesDuring) / runs;
   }
   return null;
 }
@@ -1307,9 +1307,9 @@ function renderCostRows(into, costs) {
         return recent === null ? "-" : bytes(recent);
       }
       case "per run, all": return bytes(row.perRunBytes);
-      case "p50": return bytes(row.allocatedP50Bytes);
-      case "p95": return bytes(row.allocatedP95Bytes);
-      case "p99": return bytes(row.allocatedP99Bytes);
+      case "p50": return bytes(row.bytesP50);
+      case "p95": return bytes(row.bytesP95);
+      case "p99": return bytes(row.bytesP99);
       case "allocs/run": return row.objectsPerRun || "-";
       case "mean size": return bytes(row.meanObjectBytes);
       case "cpu": return row.cpuSecondsDuring
@@ -1328,9 +1328,9 @@ function renderCostRows(into, costs) {
 }
 
 function render(snapshot) {
-  el("taken").textContent = "read at " + new Date(snapshot.takenAt).toLocaleTimeString();
-  el("dropped").textContent = snapshot.dropped
-    ? snapshot.dropped + " dropped"
+  el("taken").textContent = "read at " + new Date(snapshot.time).toLocaleTimeString();
+  el("drops").textContent = snapshot.drops
+    ? snapshot.drops + " dropped"
     : "";
   previous = latest === snapshot ? previous : latest;
   latest = snapshot;
@@ -1339,8 +1339,8 @@ function render(snapshot) {
   renderCosts(el("costs"), el("costcaveat"), snapshot.costs);
   renderAccount(snapshot.costs);
   renderFibers(el("fibers"), snapshot.fibers);
-  el("owned").textContent = snapshot.owned && snapshot.owned.counted
-    ? snapshot.owned.fibers + " fiber(s), " + snapshot.owned.resources +
+  el("liveWork").textContent = snapshot.liveWork && snapshot.liveWork.counted
+    ? snapshot.liveWork.fibers + " fiber(s), " + snapshot.liveWork.resources +
       " resource(s) owned"
     : "not counting (needs debug tracking)";
   renderOpen(el("open"), snapshot.openSpans);
@@ -1367,7 +1367,7 @@ function render(snapshot) {
       case "p95": return micros(row.p95Micros) || "-";
       case "p99": return micros(row.p99Micros) || "-";
       case "longest": return micros(row.maxMicros) || "-";
-      case "waited": return micros(row.waitedMicros) || "-";
+      case "waited": return micros(row.delayMicros) || "-";
     }
   });
   renderEndpoints(el("endpoints"), el("endpointcaveat"), snapshot);
@@ -1398,7 +1398,7 @@ function renderEndpoints(into, caveat, snapshot) {
   // and reading them as one would be wrong: a time is a bucket bound from a
   // histogram, and a size is a run that happened, read from the runs kept.
   const kept = endpoints.reduce(
-    (most, one) => Math.max(most, (one.spent && one.spent.keptRuns) || 0), 0);
+    (most, one) => Math.max(most, (one.spent && one.spent.sampleSize) || 0), 0);
   caveat.textContent = endpoints.length
     ? "times are bucket bounds; sizes are measured runs, from the last "
       + kept + " kept per endpoint"
@@ -1413,9 +1413,9 @@ function renderEndpoints(into, caveat, snapshot) {
       case "p95": return micros(row.timed.p95Micros) || "-";
       case "p99": return micros(row.timed.p99Micros) || "-";
       case "slowest": return micros(row.timed.maxMicros) || "-";
-      case "bytes p50": return spentHere ? bytes(spentHere.allocatedP50Bytes) : "-";
-      case "bytes p95": return spentHere ? bytes(spentHere.allocatedP95Bytes) : "-";
-      case "bytes p99": return spentHere ? bytes(spentHere.allocatedP99Bytes) : "-";
+      case "bytes p50": return spentHere ? bytes(spentHere.bytesP50) : "-";
+      case "bytes p95": return spentHere ? bytes(spentHere.bytesP95) : "-";
+      case "bytes p99": return spentHere ? bytes(spentHere.bytesP99) : "-";
       case "allocs/run": return spentHere ? (spentHere.objectsPerRun || "-") : "-";
     }
   });
