@@ -1,4 +1,4 @@
-// Command inspectdemo runs the inspected program with the inspector mounted,
+// Command inspectdemo runs the notebook program with the inspector mounted,
 // exercises it, and reports what the inspector answers.
 //
 // It exists so the tooling is demonstrably a program and not a diagram, and

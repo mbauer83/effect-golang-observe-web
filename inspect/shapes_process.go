@@ -65,7 +65,7 @@ type Point struct {
 
 // Cost is what the process spent while one route's work ran.
 //
-// AllocatedDuring is the process's allocation during the work, so on a busy
+// BytesDuring is the process's allocation during the work, so on a busy
 // program it includes whatever else was running. The name carries the caveat
 // because a reader who takes it for attribution will draw the wrong
 // conclusion, and a paragraph elsewhere will not stop them.
@@ -80,7 +80,7 @@ type Cost struct {
 	// collector to chase whatever its size.
 	ObjectsPerRun   int64
 	MeanObjectBytes int64
-	// BytesP50, AllocatedP95Bytes and AllocatedP99Bytes are where
+	// BytesP50, BytesP95 and BytesP99 are where
 	// this name's runs fell, and ObjectsP95 how many allocations the worst one
 	// in twenty made.
 	//

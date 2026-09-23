@@ -66,10 +66,10 @@ Then open `/inspect`.
 ## Layout
 
 ```text
-inspect/                    Watched, Snapshot, Surface, Routes, Observing, Sampling
+inspect/                    Telemetry, Snapshot, Surface, Routes, Tracer, Sampler
 inspect/page.html           the page, one checked-in document
 inspect/assets/             the vendored chart library, and its licence
-examples/notebook/         a small web program with the inspector mounted
+examples/notebook/          a small web program with the inspector mounted
 examples/cmd/inspectdemo/   the example as a runnable command
 test/unit/                  the wire conversion
 test/acceptance/            the inspector inside the program, over a socket

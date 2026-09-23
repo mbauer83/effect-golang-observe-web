@@ -5,13 +5,13 @@ inspect.Tracer[R, E](costs) web.RouteMiddleware[R, E]   // the whole integration
 inspect.Names(declarations) []string              // the metric vocabulary
 inspect.NameOf(declaration) string
 
-inspect.Routes[R, E](watched, at) ([]web.Route[R, E], error)
-inspect.Surface[R, E](watched, at) (web.Routes[R, E], error)
+inspect.Routes[R, E](telemetry, at) ([]web.Route[R, E], error)
+inspect.Surface[R, E](telemetry, at) (web.Routes[R, E], error)
 
 inspect.Telemetry{Spans, Fibers, Window, Collector, Buffer, LiveWork, Series, Costs, Surface}
-func (watched Watched) Take(now time.Time) Snapshot
+func (telemetry *Telemetry) Take(now time.Time) Snapshot
 inspect.Read(entity) (Snapshot, error)
-inspect.Write(taken) ([]byte, error)
+inspect.Write(snapshot) ([]byte, error)
 inspect.Page() []byte
 inspect.Script() []byte      // the vendored chart library
 inspect.Stylesheet() []byte
@@ -99,7 +99,7 @@ collector shows no measurements rather than refusing to start.
 |---|---|
 | `Fibers` | which fibers are running, nested as forked, with ages |
 | `LiveWork` | what the runtime still holds (`runtime.LiveWork`) |
-| `Running` | which spans are open, with ages |
+| `Spans` | which spans are open, with ages |
 | `Window` | the recent events, folded into a trace |
 | `Collector` | bounded counts, durations and delays |
 | `Buffer` | how many events the queue discarded |
@@ -142,10 +142,6 @@ zeroes and "nobody is counting" look identical otherwise.
 means: a route that spends all of itself inside one stage is not where the
 time went, the stage is, and ranking by total would blame the route.
 
-`LiveWork.Counted` says whether the runtime was built to keep its counters — off
-by default, since they cost a pair of atomics per fiber and per resource. Two
-zeroes and "nobody is counting" look identical otherwise.
-
 `Read` and `Write` are public because the inspector's own client should be a
 client of a contract rather than of a guess: a script polling the snapshot,
 another tool aggregating several programs, or a test asserting on what a page
@@ -157,8 +153,8 @@ will render.
 `*process.Costs`, and a `nil` turns that half off: the cost is real, two reads
 of `runtime/metrics` per request.
 
-`Sampler` does the same for the route's own phases — decoding, handling,
-encoding. The transports name those and cannot measure them: they read no
+`Sampler` does the same for the route's own phases — decode, handle,
+encode. The transports name those and cannot measure them: they read no
 counters and depend on nothing that does, so `web.Routes.WithPhaseSampler` hands each
 phase to a sampler and this is the sampler. Without it the phases appear on the
 timeline with no figures, which is what they did until it existed.
