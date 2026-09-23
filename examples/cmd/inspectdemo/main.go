@@ -76,7 +76,7 @@ func main() {
 		defer close(stopped)
 		runtime.Run(ctx, effect.Unit{}, notebook.Serve(listener, boundary, surface))
 	}()
-	fmt.Printf("inspected: listening on %s, inspector at %s%s\n",
+	fmt.Printf("notebook: listening on %s, inspector at %s%s\n",
 		base, base, inspect.DefaultAt)
 
 	exercise(base)
