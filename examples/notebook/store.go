@@ -19,13 +19,11 @@ type Note struct {
 
 // NoteSchema describes a note, and is what serves both directions.
 var NoteSchema = schema.Struct[Note]("Note",
-	schema.FieldOf("title", schema.Text().Check(schema.MinLength(1), schema.MaxLength(80)),
-		func(value Note) string { return value.Title },
-		func(value *Note, field string) { value.Title = field }).
+	schema.FieldAt("title", schema.Text().Check(schema.MinLength(1), schema.MaxLength(80)),
+		func(value *Note) *string { return &value.Title }).
 		WithDescription("Title identifies the note."),
-	schema.FieldOf("body", schema.Text().Check(schema.MaxLength(400)),
-		func(value Note) string { return value.Body },
-		func(value *Note, field string) { value.Body = field }),
+	schema.FieldAt("body", schema.Text().Check(schema.MaxLength(400)),
+		func(value *Note) *string { return &value.Body }),
 ).WithDescription("Note is one note.")
 
 // NotesSchema is the collection.

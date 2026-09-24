@@ -27,18 +27,10 @@ type Report struct {
 
 // ReportSchema describes it.
 var ReportSchema = schema.Struct[Report]("Report",
-	schema.FieldOf("notes", schema.Int(),
-		func(value Report) int { return value.Notes },
-		func(value *Report, field int) { value.Notes = field }),
-	schema.FieldOf("words", schema.Int(),
-		func(value Report) int { return value.Words },
-		func(value *Report, field int) { value.Words = field }),
-	schema.FieldOf("longest", schema.Text(),
-		func(value Report) string { return value.Longest },
-		func(value *Report, field string) { value.Longest = field }),
-	schema.FieldOf("digest", schema.Text(),
-		func(value Report) string { return value.Digest },
-		func(value *Report, field string) { value.Digest = field }),
+	schema.FieldAt("notes", schema.Int(), func(value *Report) *int { return &value.Notes }),
+	schema.FieldAt("words", schema.Int(), func(value *Report) *int { return &value.Words }),
+	schema.FieldAt("longest", schema.Text(), func(value *Report) *string { return &value.Longest }),
+	schema.FieldAt("digest", schema.Text(), func(value *Report) *string { return &value.Digest }),
 ).WithDescription("Report is a summary of the notes.")
 
 // Stages are the names the report's parts are measured under.
