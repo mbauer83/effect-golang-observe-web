@@ -4,8 +4,6 @@ package inspect
 // written.
 
 import (
-	"log/slog"
-
 	"github.com/mbauer83/effect-golang-observe/process"
 	"github.com/mbauer83/effect-golang-web/web"
 	"github.com/mbauer83/effect-golang/effect"
@@ -33,31 +31,18 @@ import (
 // value, and the rule that forbids it as a metric label forbids it as a span
 // name: a series per title is a series per request.
 func Tracer[R, E any](costs *process.Costs) web.RouteMiddleware[R, E] {
-	return func(
-		declaration web.Declaration,
-		handler web.Handler[R, E],
-	) web.Handler[R, E] {
+	spans := web.RouteSpans[R, E]()
+	return func(declaration web.Declaration, handler web.Handler[R, E]) web.Handler[R, E] {
 		name := NameOf(declaration)
-		method := slog.String("method", declaration.Method)
-		route := slog.String("route", declaration.Path)
-		return func(request web.Request) effect.Effect[R, E, web.Response] {
-			// Annotate outside WithSpan, not inside. Metadata supplied inside
-			// a span applies to the work within it and not to the span's own
-			// start and end, so annotating inside put the method and the route
-			// on nothing a reader of the trace can see. Measured, not
-			// reasoned: the same span reports [] one way round and
-			// [method=..., route=...] the other.
-			return process.Track(costs, name, handler(request)).
-				WithName(name).
-				WithSpan(name).
-				Annotate(method, route)
-		}
+		return spans(declaration, func(request web.Request) effect.Effect[R, E, web.Response] {
+			return process.Track(costs, name, handler(request))
+		})
 	}
 }
 
 // NameOf is the span name a route is observed under.
 func NameOf(declaration web.Declaration) string {
-	return declaration.Method + " " + declaration.Path
+	return web.RouteName(declaration)
 }
 
 // Names are the span names a surface's routes are observed under.
