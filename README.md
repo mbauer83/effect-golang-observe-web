@@ -28,6 +28,7 @@ built on it would be a tool nobody had tried the stack with.
 | [Naming requests: `Tracer`, `Sampler`, `Names`](docs/reference/inspect.md) | usable; settings on the surface, nothing at the call sites |
 | [Memory and compute: gauges, charts, cost per name, per-run figures](docs/reference/inspect.md) | usable; process-wide, because Go reports no per-goroutine allocation or CPU |
 | [The page: timeline, hot paths, fibers, spans, surface](docs/reference/inspect.md) | usable; charts by vendored uPlot, served from the inspector |
+| [One set of settings for traces, metrics and the inspector](docs/reference/observability.md) | usable |
 | Push protocol to an out-of-process tool | absent, and [deliberately](docs/reference/inspect.md) |
 
 ## The shortest useful thing
@@ -106,6 +107,8 @@ allocation — which is the distinction the hot-path panel exists for.
 
 ## Documentation
 
+- [Observability](docs/reference/observability.md) — traces, metrics and the
+  inspector from one set of settings
 - [The inspector](docs/reference/inspect.md) — what it serves, what it shows,
   and what it deliberately is not
 
